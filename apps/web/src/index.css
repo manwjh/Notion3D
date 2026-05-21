@@ -1,0 +1,71 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg-base: #0c0e12;
+  --bg-surface: #141820;
+  --bg-elevated: #1a1f28;
+  --bg-input: #0f1115;
+  --border: #252b36;
+  --border-strong: #3a4254;
+  --text: #e8eaed;
+  --text-muted: #8b93a7;
+  --text-subtle: #6b7280;
+  --accent: #4d84f7;
+  --accent-soft: rgba(77, 132, 247, 0.14);
+  --success: #5cb88a;
+  --success-soft: rgba(92, 184, 138, 0.14);
+  --warn: #f0b27a;
+  --danger: #f08080;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --shadow-pop: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --font: "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  font-family: var(--font);
+  background: var(--bg-base);
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

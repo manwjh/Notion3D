@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "notion3d-api": {
+      "comment": "后续可接入 MCP Server，直接调用 http://localhost:8000 的 REST API。当前请用 make api + make web 调试前后端。"
+    }
+  }
+}
