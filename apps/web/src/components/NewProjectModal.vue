@@ -4,13 +4,9 @@ import { nextTick, ref, watch } from "vue";
 const props = defineProps<{
   open: boolean;
   busy?: boolean;
-  samplePrompts?: string[];
 }>();
 
-const emit = defineEmits<{
-  close: [];
-  submit: [name: string];
-}>();
+const emit = defineEmits<{ close: []; submit: [name: string] }>();
 
 const projectName = ref("我的模型");
 const inputRef = ref<HTMLInputElement | null>(null);
@@ -49,8 +45,8 @@ function handleSubmit(e: Event) {
       aria-labelledby="new-project-title"
       @click.stop
     >
-      <h3 id="new-project-title">新建建模项目</h3>
-      <p class="modal-desc">给项目取个名字，然后开始用对话描述模型。</p>
+      <h3 id="new-project-title">新建设计项目</h3>
+      <p class="modal-desc">取个名字即可。创建后在右侧用一句话描述想要的 3D 物件。</p>
 
       <div class="modal-templates">
         <button
@@ -83,14 +79,10 @@ function handleSubmit(e: Event) {
             取消
           </button>
           <button type="submit" class="btn-primary" :disabled="busy">
-            {{ busy ? "创建中…" : "开始建模" }}
+            {{ busy ? "创建中…" : "创建并开始" }}
           </button>
         </div>
       </form>
-
-      <p v-if="samplePrompts?.length" class="modal-footnote">
-        创建后可试试：{{ samplePrompts.slice(0, 2).join("、") }}…
-      </p>
     </div>
   </div>
 </template>

@@ -37,7 +37,7 @@ Task Progress:
 - [ ] 1. notion3d_health — 确认 API + OpenSCAD 就绪
 - [ ] 2. notion3d_create_project（或选用已有 project_id）
 - [ ] 3. 你生成 OpenSCAD → notion3d_render_scad（首选）
-      或简单几何 → notion3d_chat（仅规则模板，无 LLM）
+      或简单几何 → notion3d_template（Engine 规则模板，无 LLM）
 - [ ] 4. notion3d_wait_job 或轮询 notion3d_get_job（预览→STL 两阶段）
 - [ ] 5. notion3d_list_versions — 确认 version / preview_url / stl_url
 - [ ] 6. （可选）本地 validate.sh / multi-preview.sh 复核 SCAD
@@ -45,7 +45,7 @@ Task Progress:
 
 **API Key 由 Agent 平台管理**（Cursor / Claude Code / OpenClaw），不在 Web 或 Notion3D API 配置。
 
-**异步规则**：`notion3d_render_scad` / `notion3d_chat` 立即返回 job；STL 可能需 1–3 分钟。用 `notion3d_wait_job` 或轮询，不要同步死等。
+**异步规则**：`notion3d_render_scad` / `notion3d_template` 立即返回 job；STL 可能需 1–3 分钟。用 `notion3d_wait_job` 或轮询，不要同步死等。
 
 **断点续作**：刷新或 API 重启后 `notion3d_list_active_jobs`；仅有预览时 `notion3d_resume_stl`。
 
@@ -68,7 +68,7 @@ Web 与 Agent **不直连**，共享同一 API / `data/projects/`。用户也可
 
 Web 是 **可视化工作台**，不是第二个 Agent：
 
-1. **Agent 建模**：你在 MCP 中 `notion3d_render_scad`（复杂件）或 `notion3d_chat`（简单模板）
+1. **Agent 建模**：你在 MCP 中 `notion3d_render_scad`（复杂件）或 `notion3d_template`（简单模板）
 2. **打开 web_url**：用户预览、旋转 3D、导出 STL
 3. **快速调整**：右侧规则模板 + 语义部位 + 左侧参数滑块
 4. **高级**：3D 点选、OpenSCAD 源码在「高级代码」Tab
@@ -103,8 +103,8 @@ Agent 调 API 时可用 `region` 字段（与 Web 部位芯片一致），例如
 | MCP Server | `apps/mcp-server` | Agent 统一工具层 |
 | Skill 主文档 | `docs/skills/notion3d-openscad.md` | 跨平台共享 |
 | 产物 | `data/projects/{id}/versions/{n}/` | scad / preview.png / stl |
-| 规则模板 | `apps/api/app/services/cad_service.py` | Web chat 简单几何 |
-| 任务分类 | `apps/api/app/services/task_class.py` | A/B/C 分类（Agent 侧使用）
+| 规则模板 | `apps/api/app/services/cad_service.py` | `notion3d_template` |
+| 架构 | `docs/architecture.md` | Engine / MCP / Adapter |
 
 本地调试：
 

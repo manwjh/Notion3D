@@ -19,64 +19,64 @@ export type GenerationState = {
 };
 
 type JobLike = {
+  status?: string;
+  phase?: string | null;
   preview_ready?: boolean;
   preview_url?: string | null;
   stl_ready?: boolean;
   version?: number | null;
+  message?: string | null;
 };
 
-export function phaseFromJobMessage(
-  status: string,
-  message: string | null,
-  job?: JobLike
-): JobPhase {
-  const msg = message ?? "";
-  if (status === "failed") return "failed";
-  if (status === "succeeded") return "done";
-  if (job?.stl_ready || msg.includes("3D 网格已完成")) return "rendering";
-  if (
-    job?.preview_ready ||
-    msg.includes("预览图") ||
-    msg.includes("预览已") ||
-    msg.includes("计算 3D")
-  ) {
-    return "previewing";
-  }
-  if (msg.includes("OpenSCAD") || msg.includes("生成")) return "generating";
-  return "submitting";
+const PHASE_MAP: Record<string, JobPhase> = {
+  pending: "generating",
+  scad: "generating",
+  preview: "previewing",
+  stl: "rendering",
+  done: "done",
+  failed: "failed",
+};
+
+export function phaseFromJob(job: JobLike): JobPhase {
+  if (job.status === "failed" || job.phase === "failed") return "failed";
+  if (job.status === "succeeded" || job.phase === "done") return "done";
+  if (job.phase && PHASE_MAP[job.phase]) return PHASE_MAP[job.phase];
+  if (job.stl_ready) return "rendering";
+  if (job.preview_ready) return "previewing";
+  return "generating";
 }
 
 export function phaseLabel(phase: JobPhase, detail?: string | null): string | null {
   if (detail && phase !== "idle" && phase !== "done" && phase !== "failed") return detail;
   switch (phase) {
     case "submitting":
-      return "提交任务…";
+      return "收到需求…";
     case "generating":
-      return "正在生成模型…";
+      return "正在生成方案…";
     case "previewing":
-      return "预览已显示，正在加载 3D…";
+      return "初稿预览好了，正在加载 3D…";
     case "rendering":
-      return "正在加载 3D 模型…";
+      return "正在完善可打印模型…";
     case "done":
       return "完成";
     case "failed":
-      return detail ?? "失败";
+      return detail ?? "未能完成，请重试";
     default:
       return null;
   }
 }
 
-export const GENERATION_STEPS = [
-  { id: "generating", label: "理解并建模", hint: "根据描述生成参数化模型" },
-  { id: "previewing", label: "生成预览", hint: "快速预览，确认造型是否正确" },
-  { id: "rendering", label: "加载 3D", hint: "计算可旋转、可导出的 3D 模型" },
+export const SESSION_STEPS = [
+  { id: "generating", label: "理解需求", hint: "根据描述生成方案" },
+  { id: "previewing", label: "出初稿", hint: "快速预览造型方向" },
+  { id: "rendering", label: "可打印模型", hint: "生成可旋转、可导出的 3D" },
 ] as const;
 
 export function stepIndex(phase: JobPhase): number {
   if (phase === "rendering" || phase === "done") return 2;
   if (phase === "previewing") return 1;
   if (phase === "generating" || phase === "submitting") return 0;
-  return 0;
+  return -1;
 }
 
 export function jobToGenerationState(
@@ -84,7 +84,7 @@ export function jobToGenerationState(
   detail: string | null,
   prompt: string | null,
   busy: boolean,
-  job?: JobLike & { version?: number | null }
+  job?: JobLike,
 ): GenerationState {
   return {
     phase,

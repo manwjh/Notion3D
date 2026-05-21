@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import health, projects, tools
+from app.routers import health, project_agent, projects
 from app.services import job_service
 
 
@@ -18,8 +18,8 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(
     title="Notion3D API",
-    description="文本 → OpenSCAD 建模 → 预览 → 导出；Agent 通过 MCP Server 集成",
-    version="0.2.0",
+    description="OpenSCAD 渲染引擎；Web 对话与 MCP 均经外部 Agent",
+    version="0.3.0",
     lifespan=lifespan,
 )
 
@@ -32,5 +32,5 @@ app.add_middleware(
 )
 
 app.include_router(health.router)
-app.include_router(tools.router)
 app.include_router(projects.router)
+app.include_router(project_agent.router)

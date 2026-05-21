@@ -11,9 +11,9 @@ from notion3d_mcp.links import resolve_web_base_from_health
 mcp = FastMCP(
     "notion3d",
     instructions=(
-        "Notion3D OpenSCAD modeling pipeline. YOU (the Agent) generate OpenSCAD — "
+        "Notion3D OpenSCAD engine (no LLM). YOU (the Agent) generate OpenSCAD — "
         "prefer notion3d_render_scad to submit SCAD for rendering. "
-        "notion3d_chat only runs server-side rule templates (cube/box/etc.), no LLM. "
+        "notion3d_template runs server-side rule templates only (cube/sphere/box), no LLM. "
         "Jobs are async: returns job_id — poll with notion3d_get_job or notion3d_wait_job. "
         "After success, share web_url with the user so they can preview/export in the browser. "
         "Follow the notion3d-openscad Skill for SCAD quality rules."
@@ -63,7 +63,7 @@ def notion3d_create_project(name: str = "Agent 项目") -> str:
 
 
 @mcp.tool()
-def notion3d_chat(
+def notion3d_template(
     project_id: str,
     prompt: str,
     region: str | None = None,
@@ -72,10 +72,9 @@ def notion3d_chat(
     pick_z: float | None = None,
     pick_label: str | None = None,
 ) -> str:
-    """Start a job from natural language using server-side rule templates only (no LLM).
+    """Simple NL → rule-based OpenSCAD template (no LLM). Returns a render job.
 
     For complex models, generate OpenSCAD yourself and use notion3d_render_scad instead.
-    Use `region` for semantic edits (e.g. 孔, 顶部, 整体) without 3D picking.
     """
     pick = None
     if pick_x is not None and pick_y is not None and pick_z is not None:
@@ -88,7 +87,7 @@ def notion3d_chat(
             "nz": 0.0,
             "label": pick_label,
         }
-    job = client.chat(project_id, prompt, pick=pick, region=region)
+    job = client.template(project_id, prompt, pick=pick, region=region)
     return _out(
         {
             **job,

@@ -5,5 +5,8 @@ __pycache__/
 *.pyc
 .env
 data/projects/
+data/jobs/
 .DS_Store
 *.egg-info/
+*.tsbuildinfo
+.bin/

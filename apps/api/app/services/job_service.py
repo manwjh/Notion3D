@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from app.models.schemas import JobStatus, MessageRole
-from app.services import cad_service, job_store, storage, task_class
+from app.services import cad_service, job_store, storage
 from app.services.pick_context import format_edit_prompt
 
 _jobs: dict[str, dict] = {}
@@ -36,7 +36,7 @@ def _new_job(**fields) -> dict:
     return _persist(job)
 
 
-def create_job(
+def create_template_job(
     project_id: str,
     prompt: str,
     pick: dict | None = None,
@@ -48,7 +48,7 @@ def create_job(
         prompt=prompt,
         pick=pick,
         region=region,
-        kind="generate",
+        kind="template",
         status=JobStatus.pending.value,
     )
 
@@ -237,9 +237,13 @@ def _latest_complete_scad(project_id: str) -> str | None:
     return None
 
 
-async def run_generate_job(job_id: str) -> None:
+def _template_success_message(_prompt: str, version: int) -> str:
+    return f"初稿 v{version} 好了，左侧可以预览和旋转。继续描述即可迭代。"
+
+
+async def run_template_job(job_id: str) -> None:
     job = get_job(job_id)
-    if not job or job.get("kind") != "generate":
+    if not job or job.get("kind") != "template":
         return
 
     project_id = job["project_id"]
@@ -288,11 +292,11 @@ async def run_generate_job(job_id: str) -> None:
         _append_success_message(
             project_id,
             job_id,
-            task_class.success_message(prompt, version),
+            _template_success_message(prompt, version),
         )
     except Exception as exc:
         update_job(job_id, status=JobStatus.failed.value, message=str(exc))
-        _append_failure_message(project_id, job_id, f"建模失败：{exc}")
+        _append_failure_message(project_id, job_id, f"这版方案没做出来：{exc}")
 
 
 async def run_render_scad_job(job_id: str) -> None:
@@ -376,8 +380,8 @@ async def resume_interrupted_jobs() -> None:
 
     for job in job_store.list_active_jobs():
         job_id = job["id"]
-        if job.get("kind") == "generate":
-            asyncio.create_task(run_generate_job(job_id))
+        if job.get("kind") == "template":
+            asyncio.create_task(run_template_job(job_id))
         elif job.get("kind") == "render":
             asyncio.create_task(run_render_scad_job(job_id))
 

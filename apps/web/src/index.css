@@ -28,11 +28,17 @@
     Arial, sans-serif;
 }
 
-html,
+html {
+  height: 100%;
+  height: 100dvh;
+}
+
 body,
-#root {
+#app {
   margin: 0;
   height: 100%;
+  height: 100dvh;
+  overflow: hidden;
   font-family: var(--font);
   background: var(--bg-base);
   color: var(--text);

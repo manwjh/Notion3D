@@ -1,0 +1,49 @@
+@media (max-width: 900px) {
+
+  .welcome-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .prompt-chips--grid {
+    grid-template-columns: 1fr;
+  }
+
+  .chat-form {
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 640px) {
+  .brand-subtitle {
+    display: none;
+  }
+
+  .topbar {
+    padding: 0.45rem 0.65rem;
+  }
+
+  .topbar-actions select {
+    max-width: min(100px, 32vw);
+    font-size: 0.78rem;
+    padding: 0.32rem 0.45rem;
+  }
+
+  .topbar-actions .export-menu {
+    display: none;
+  }
+
+  .version-bar {
+    padding: 0.45rem 0.55rem;
+  }
+
+  .version-actions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .chat-header h2 {
+    font-size: 0.88rem;
+  }
+}
+

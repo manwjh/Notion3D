@@ -1,21 +1,10 @@
 export type Project = {
   id: string;
   name: string;
-  tool?: string;
-  track?: string;
   created_at: string;
   updated_at: string;
   latest_version: number | null;
   web_url?: string | null;
-};
-
-export type ToolDef = {
-  id: string;
-  track: string;
-  title: string;
-  description: string;
-  available: boolean;
-  sample_prompts: string[];
 };
 
 export type ChatMessage = {
@@ -29,13 +18,17 @@ export type ChatMessage = {
 export type Job = {
   id: string;
   project_id: string;
+  kind?: string | null;
   status: "pending" | "running" | "succeeded" | "failed";
+  phase?: string | null;
   prompt?: string | null;
   message: string | null;
   version: number | null;
   preview_url?: string | null;
   preview_ready?: boolean;
   stl_ready?: boolean;
+  error?: string | null;
+  web_url?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -48,26 +41,70 @@ export type ModelVersion = {
   stl_url: string | null;
   scad_url: string | null;
   preview_url: string | null;
-  three_mf_url: string | null;
   created_at: string;
   prompt: string | null;
 };
 
+export type AgentProvider = {
+  id: string;
+  title: string;
+  kind: string;
+  configured: boolean;
+  ready: boolean;
+  note?: string;
+};
+
+export type WebChatMode = "agent" | "setup_required";
+
 export type Health = {
   status: string;
   openscad_available: boolean;
-  slicer_available: boolean;
-  bambu_connect_available: boolean;
-  agent_via_mcp?: boolean;
-  mcp_server?: string;
   web_base_url?: string;
+  agent_provider?: string;
+  agent_active?: string | null;
+  agent_bridge_ready?: boolean;
+  agent_providers?: AgentProvider[];
+  web_chat_mode?: WebChatMode;
+  assistant_label?: string | null;
 };
 
-export type ActionResult = {
-  ok: boolean;
-  message: string;
-  three_mf_url?: string | null;
-  bambu_connect_url?: string | null;
+export type AgentRun = {
+  provider: string;
+  session_id: string;
+  run_id: string;
+  status: string;
+  external_url?: string | null;
+};
+
+export type Turn = {
+  routing: "agent" | "blocked";
+  reason?: string | null;
+  agent?: AgentRun | null;
+  assistant_message_id?: string | null;
+};
+
+export type AgentStatus = {
+  active: boolean;
+  provider?: string | null;
+  session_id?: string | null;
+  run_id?: string | null;
+  status?: string | null;
+  external_url?: string | null;
+  active_job_id?: string | null;
+};
+
+export type ProjectCapabilities = {
+  web_chat_mode: WebChatMode;
+  assistant_label: string | null;
+  assistant_ready: boolean;
+};
+
+export type ProjectState = {
+  project: Project;
+  messages: ChatMessage[];
+  active_job: Job | null;
+  agent: AgentStatus;
+  capabilities: ProjectCapabilities;
 };
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -91,24 +128,22 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export const health = () => request<Health>("/health");
 
-export const listTools = () => request<ToolDef[]>("/api/tools");
-
 export const listProjects = () => request<Project[]>("/api/projects");
 
 export const createProject = (name: string) =>
   request<Project>("/api/projects", {
     method: "POST",
-    body: JSON.stringify({ name, tool: "parametric" }),
+    body: JSON.stringify({ name }),
   });
 
 export const renderScad = (projectId: string, scadCode: string, label?: string) =>
   request<Job>(`/api/projects/${projectId}/render-scad`, {
     method: "POST",
-    body: JSON.stringify({ scad_code: scadCode, label: label ?? "手动编辑 SCAD" }),
+    body: JSON.stringify({ scad_code: scadCode, label: label ?? "参数调整" }),
   });
 
-export const listMessages = (projectId: string) =>
-  request<ChatMessage[]>(`/api/projects/${projectId}/messages`);
+export const getProjectState = (projectId: string) =>
+  request<ProjectState>(`/api/projects/${projectId}/state`);
 
 export type ModelPick = {
   x: number;
@@ -120,13 +155,13 @@ export type ModelPick = {
   label?: string | null;
 };
 
-export const sendChat = (
+export const sendTurn = (
   projectId: string,
   content: string,
   pick?: ModelPick | null,
   region?: string | null,
 ) =>
-  request<Job>(`/api/projects/${projectId}/chat`, {
+  request<Turn>(`/api/projects/${projectId}/turn`, {
     method: "POST",
     body: JSON.stringify({
       content,
@@ -148,13 +183,3 @@ export const resumeVersionStl = (projectId: string, version: number) =>
 
 export const listVersions = (projectId: string) =>
   request<ModelVersion[]>(`/api/projects/${projectId}/versions`);
-
-export const sliceVersion = (projectId: string, version: number) =>
-  request<ActionResult>(`/api/projects/${projectId}/versions/${version}/slice`, {
-    method: "POST",
-  });
-
-export const printVersion = (projectId: string, version: number) =>
-  request<ActionResult>(`/api/projects/${projectId}/versions/${version}/print`, {
-    method: "POST",
-  });

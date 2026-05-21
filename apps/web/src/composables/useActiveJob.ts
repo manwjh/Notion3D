@@ -2,7 +2,7 @@ import { onUnmounted, ref, watch } from "vue";
 import { getJob, listActiveJobs, type Job } from "../api/client";
 import {
   jobToGenerationState,
-  phaseFromJobMessage,
+  phaseFromJob,
   type GenerationState,
 } from "../types/generation";
 
@@ -26,14 +26,26 @@ export function useActiveJob(
     let current = job;
     while (current.status === "pending" || current.status === "running") {
       if (cancelled) return;
-      const phase = phaseFromJobMessage(current.status, current.message, current);
-      generation.value = jobToGenerationState(phase, current.message, prompt, true, current);
+      const phase = phaseFromJob(current);
+      generation.value = jobToGenerationState(
+        phase,
+        current.message,
+        prompt,
+        true,
+        current,
+      );
       await sleep(800);
       current = await getJob(pid, current.id);
     }
 
     const finalPhase = current.status === "succeeded" ? "done" : "failed";
-    generation.value = jobToGenerationState(finalPhase, current.message, prompt, true, current);
+    generation.value = jobToGenerationState(
+      finalPhase,
+      current.error ?? current.message,
+      prompt,
+      true,
+      current,
+    );
     await onDone();
 
     const delay = current.status === "succeeded" ? 1500 : 3000;

@@ -1,0 +1,251 @@
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+  padding: 0.55rem 0.85rem;
+  border-bottom: 1px solid var(--border);
+  background: linear-gradient(180deg, #151920 0%, #12151c 100%);
+  flex-shrink: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.project-picker select {
+  max-width: min(220px, 42vw);
+  min-width: 0;
+}
+
+.mobile-panel-tabs {
+  display: none;
+  flex-shrink: 0;
+  gap: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.mobile-panel-tab {
+  flex: 1;
+  padding: 0.45rem 0.65rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-strong);
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.mobile-panel-tab.active {
+  color: var(--text);
+  border-color: rgba(77, 132, 247, 0.45);
+  background: var(--accent-soft);
+}
+
+.workspace {
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.workspace--studio {
+  grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 420px);
+}
+
+.brand-mark {
+  width: 32px;
+  height: 32px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.brand-mark span {
+  position: absolute;
+  border: 1.5px solid rgba(110, 168, 254, 0.55);
+  background: rgba(77, 132, 247, 0.08);
+  border-radius: 3px;
+}
+
+.brand-mark span:nth-child(1) {
+  inset: 2px 8px 14px 2px;
+  transform: rotate(-8deg);
+}
+
+.brand-mark span:nth-child(2) {
+  inset: 8px 2px 8px 10px;
+  transform: rotate(6deg);
+}
+
+.brand-mark span:nth-child(3) {
+  inset: 14px 10px 2px 4px;
+  transform: rotate(-4deg);
+}
+
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
+  min-width: 0;
+}
+
+
+.topbar-actions select,
+.topbar-actions > button,
+.btn-secondary {
+  background: var(--bg-elevated);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0.38rem 0.7rem;
+  font-size: 0.82rem;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #263042;
+}
+
+.topbar-actions > button:hover {
+  background: #263042;
+}
+
+
+.studio-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-stack {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio-stack .viewer-root {
+  flex: 1;
+  min-height: 200px;
+}
+
+.scad-editor {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: none;
+  background: #0a0c10;
+  color: #d4dae6;
+  font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  padding: 0.55rem 0.65rem;
+}
+
+.scad-editor:focus {
+  outline: none;
+}
+
+.brand-title {
+  font-size: 1.05rem;
+  letter-spacing: 0.02em;
+}
+
+.brand-subtitle {
+  color: #6b7280;
+  font-size: 0.78rem;
+}
+
+.viewport-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .mobile-panel-tabs {
+    display: flex;
+  }
+
+  .workspace--narrow {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1fr);
+  }
+
+  .workspace--narrow.workspace--show-studio .chat-pane {
+    display: none;
+  }
+
+  .workspace--narrow.workspace--show-chat .studio-pane {
+    display: none;
+  }
+
+  .chat-pane {
+    border-left: none;
+    border-top: none;
+    min-height: 0;
+  }
+
+
+  .project-status {
+    display: none;
+  }
+
+  .welcome-screen {
+    padding: 1.25rem 1rem;
+    gap: 1.25rem;
+    justify-content: flex-start;
+  }
+
+  .model-tools-panel {
+    max-height: min(36vh, 280px);
+  }
+}
+
+@media (max-width: 1100px) {
+  .workspace--studio {
+    grid-template-columns: minmax(0, 1fr) minmax(260px, 34vw);
+  }
+}
+
+@media (max-width: 1280px) and (min-width: 901px) {
+  .project-status-item {
+    font-size: 0.68rem;
+    padding: 0.15rem 0.35rem;
+  }
+
+  .project-status-meta {
+    display: none;
+  }
+}
+

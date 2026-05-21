@@ -61,7 +61,7 @@ async def prompt_to_scad(
     region: str | None = None,
 ) -> str:
     # 智能 SCAD 由外部 Agent（Cursor / Claude Code / OpenClaw）生成并通过
-    # notion3d_render_scad 提交；Web 对话仅做规则模板与简单编辑。
+    # 智能建模由 Agent 经 notion3d_render_scad 提交；cad_service 保留 NL→SCAD 供 job 管线复用。
     if existing_scad:
         return _apply_simple_edit(existing_scad, user_prompt or prompt, region=region)
     return prompt_to_scad_heuristic(user_prompt or prompt)

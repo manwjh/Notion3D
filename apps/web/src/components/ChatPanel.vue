@@ -1,10 +1,23 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import type { ChatMessage, Job, ModelPick } from "../api/client";
-import { listMessages, sendChat } from "../api/client";
-import AgentGuidePanel from "./AgentGuidePanel.vue";
+import type { ChatMessage, Health, Job, ModelPick } from "../api/client";
+import { getJob, getProjectState, sendTurn } from "../api/client";
+import { mergeSessionPhase, sleep } from "../composables/useDesignTurn";
 import { EDIT_HINTS, EDIT_REGIONS } from "../config/editHints";
-import { phaseLabel, type GenerationState, type JobPhase } from "../types/generation";
+import {
+  MODE_HINT,
+  MODE_LABEL,
+  SAMPLE_PROMPTS as DEFAULT_SAMPLES,
+  assistantDisplayName,
+  type WebChatMode,
+} from "../strings/zh";
+import {
+  SESSION_STEPS,
+  phaseLabel,
+  stepIndex,
+  type GenerationState,
+  type JobPhase,
+} from "../types/generation";
 import { formatPickShort } from "../types/pick";
 
 const props = withDefaults(
@@ -13,14 +26,16 @@ const props = withDefaults(
     samplePrompts?: string[];
     hasModel?: boolean;
     initialPrompt?: string | null;
+    autoSubmitInitial?: boolean;
     pick?: ModelPick | null;
     generation: GenerationState | null;
-    trackJob: (job: Job, prompt: string) => Promise<void>;
+    health?: Health | null;
   }>(),
   {
-    samplePrompts: () => [],
+    samplePrompts: () => DEFAULT_SAMPLES,
     hasModel: false,
     initialPrompt: null,
+    autoSubmitInitial: false,
     pick: null,
   },
 );
@@ -29,6 +44,9 @@ const emit = defineEmits<{
   consumeInitialPrompt: [];
   requestProject: [];
   clearPick: [];
+  turnComplete: [];
+  trackJob: [job: Job, prompt: string];
+  openSetup: [];
 }>();
 
 const VISIBLE_HINTS = 3;
@@ -38,68 +56,77 @@ const input = ref("");
 const selectedRegion = ref<string | null>(null);
 const showAllHints = ref(false);
 const sending = ref(false);
+const agentBusy = ref(false);
+const agentExternalUrl = ref<string | null>(null);
 const submitError = ref<string | null>(null);
 const bottomRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
-const phase = computed<JobPhase>(() =>
-  submitError.value ? "failed" : sending.value ? "submitting" : props.generation?.phase ?? "idle",
+const chatMode = computed<WebChatMode>(() => props.health?.web_chat_mode ?? "setup_required");
+const modeLabel = computed(() => MODE_LABEL[chatMode.value]);
+const modeHint = computed(() => MODE_HINT[chatMode.value]);
+
+const assistantName = computed(() =>
+  assistantDisplayName(props.health?.agent_active, props.health?.assistant_label),
 );
 
-const statusDetail = computed(() => submitError.value ?? props.generation?.detail ?? null);
-const busy = computed(() => sending.value || (props.generation?.busy ?? false));
-const showProgress = computed(
-  () => busy.value || (phase.value !== "idle" && phase.value !== "done" && phase.value !== "failed"),
+const session = computed(() =>
+  mergeSessionPhase(props.generation, agentBusy.value),
 );
+
+const phase = computed<JobPhase>(() =>
+  submitError.value ? "failed" : sending.value ? "submitting" : session.value.phase,
+);
+
+const busy = computed(() => sending.value || session.value.busy);
+const canSend = computed(() => chatMode.value === "agent" && !busy.value);
+
+const statusDetail = computed(() => session.value.detail ?? submitError.value);
+
+const showProgress = computed(
+  () => busy.value && phase.value !== "done" && phase.value !== "failed",
+);
+
+const currentStep = computed(() => stepIndex(phase.value));
+
+const inputPlaceholder = computed(() => {
+  if (!props.projectId) return "先新建项目，然后描述想要的 3D 物件…";
+  if (chatMode.value === "setup_required") return "请先连接设计助手（右上角「助手」）…";
+  if (props.pick) return "说说想怎么改这里…";
+  if (selectedRegion.value) return `说说想怎么改「${selectedRegion.value}」…`;
+  if (props.hasModel) return "继续描述想改什么，或选下方快捷语…";
+  return `跟 ${assistantName.value} 说说用途、尺寸、结构…`;
+});
 
 const hints = computed(() =>
   showAllHints.value ? EDIT_HINTS : EDIT_HINTS.slice(0, VISIBLE_HINTS),
 );
 
-
-const inputPlaceholder = computed(() => {
-  if (!props.projectId) return "先选择或新建项目；复杂建模请用 Agent + MCP…";
-  if (props.pick) return "描述对此处的修改，例如：缩小一点、加厚…";
-  if (selectedRegion.value) return `描述对「${selectedRegion.value}」的修改…`;
-  if (props.hasModel) return "说说想怎么改，例如：孔加大、整体缩小 10%…";
-  return "描述模型，例如：40×30×20mm 带孔盒子";
-});
-
-const progressSteps = ["解析描述", "生成模型", "预览图", "3D 模型"];
-
 function messageTone(content: string, role: ChatMessage["role"]) {
   if (role !== "assistant") return "default";
-  if (content.includes("失败") || content.includes("不适合")) return "error";
-  if (content.includes("完成") || content.includes("渲染")) return "success";
+  if (content.includes("失败") || content.includes("不可用")) return "error";
+  if (content.includes("好了") || content.includes("初稿")) return "success";
   return "default";
 }
 
-function isStepActive(i: number) {
-  const p = phase.value;
-  return (
-    (i === 0 && (p === "submitting" || p === "generating")) ||
-    (i === 1 && p === "generating") ||
-    (i === 2 && p === "previewing") ||
-    (i === 3 && (p === "rendering" || p === "done"))
-  );
+async function refreshMessages(projectId: string) {
+  const state = await getProjectState(projectId);
+  messages.value = state.messages;
+  return state;
 }
 
-function isStepDone(i: number) {
-  const p = phase.value;
-  return p === "done" || (p === "rendering" && i < 3) || (p === "previewing" && i < 2);
-}
-
-watch(
-  () => props.initialPrompt,
-  async (v) => {
-    if (v) {
-      input.value = v;
-      emit("consumeInitialPrompt");
-      await nextTick();
-      textareaRef.value?.focus();
+async function hydrateProject(projectId: string) {
+  try {
+    const state = await refreshMessages(projectId);
+    agentExternalUrl.value = state.agent.external_url ?? null;
+    if (state.agent.active) {
+      const lastUser = [...state.messages].reverse().find((m) => m.role === "user");
+      void pollAgentRun(projectId, lastUser?.content ?? "");
     }
-  },
-);
+  } catch (err) {
+    console.error(err);
+  }
+}
 
 watch(
   () => props.projectId,
@@ -108,9 +135,11 @@ watch(
       messages.value = [];
       submitError.value = null;
       selectedRegion.value = null;
+      agentBusy.value = false;
+      agentExternalUrl.value = null;
       return;
     }
-    listMessages(pid).then((m) => (messages.value = m)).catch(console.error);
+    void hydrateProject(pid);
   },
   { immediate: true },
 );
@@ -119,7 +148,7 @@ watch(
   () => props.generation?.phase,
   (p) => {
     if ((p === "done" || p === "failed") && props.projectId) {
-      listMessages(props.projectId).then((m) => (messages.value = m)).catch(console.error);
+      refreshMessages(props.projectId).catch(console.error);
     }
   },
 );
@@ -129,20 +158,75 @@ watch([messages, phase, statusDetail], async () => {
   bottomRef.value?.scrollIntoView({ behavior: "smooth" });
 });
 
+watch(
+  () => [props.initialPrompt, props.autoSubmitInitial, props.projectId] as const,
+  async ([prompt, auto, pid]) => {
+    if (!prompt || !pid) return;
+    if (auto) {
+      emit("consumeInitialPrompt");
+      await submitText(prompt);
+      return;
+    }
+    input.value = prompt;
+    emit("consumeInitialPrompt");
+    await nextTick();
+    textareaRef.value?.focus();
+  },
+);
+
+async function pollAgentRun(projectId: string, prompt: string) {
+  if (agentBusy.value) return;
+  agentBusy.value = true;
+  let tracked = false;
+  const deadline = Date.now() + 600_000;
+  try {
+    while (Date.now() < deadline) {
+      const state = await getProjectState(projectId);
+      const st = state.agent;
+      if (st.external_url) agentExternalUrl.value = st.external_url;
+      if (st.active_job_id && !tracked) {
+        tracked = true;
+        const job = state.active_job ?? (await getJob(projectId, st.active_job_id));
+        emit("trackJob", job, prompt);
+      }
+      if (!st.active) break;
+      await sleep(2000);
+    }
+  } finally {
+    agentBusy.value = false;
+  }
+}
+
 async function submitText(text: string) {
   if (!props.projectId || !text.trim() || busy.value) return;
+  if (chatMode.value === "setup_required") {
+    submitError.value = "请先连接设计助手";
+    emit("openSetup");
+    return;
+  }
+
   const prompt = text.trim();
   const region = props.pick ? null : selectedRegion.value;
   sending.value = true;
   submitError.value = null;
+  agentExternalUrl.value = null;
+
   try {
-    const job = await sendChat(props.projectId, prompt, props.pick, region);
-    messages.value = await listMessages(props.projectId);
-    await props.trackJob(job, prompt);
-    emit("clearPick");
-    selectedRegion.value = null;
+    const turn = await sendTurn(props.projectId, prompt, props.pick, region);
+    await refreshMessages(props.projectId);
+
+    if (turn.routing === "agent") {
+      await pollAgentRun(props.projectId, prompt);
+      await refreshMessages(props.projectId);
+      emit("turnComplete");
+      emit("clearPick");
+      selectedRegion.value = null;
+      return;
+    }
+
+    emit("turnComplete");
   } catch (err) {
-    submitError.value = err instanceof Error ? err.message : "请求失败，请稍后重试";
+    submitError.value = err instanceof Error ? err.message : "发送失败，请稍后重试";
   } finally {
     sending.value = false;
   }
@@ -159,24 +243,30 @@ async function handleSubmit(e?: Event) {
   input.value = "";
   await submitText(text);
 }
+
+async function useSample(text: string) {
+  if (!props.projectId) {
+    input.value = text;
+    emit("requestProject");
+    return;
+  }
+  await submitText(text);
+}
 </script>
 
 <template>
   <div class="chat-panel">
     <header class="chat-header">
       <div class="chat-header-main">
-        <h2>快速调整</h2>
-        <span class="chat-mode-badge" :class="hasModel ? 'edit' : 'create'">
-          {{ hasModel ? "规则修改" : "简单模板" }}
-        </span>
+        <h2>设计对话</h2>
+        <span class="chat-mode-badge" :title="modeHint">{{ modeLabel }}</span>
       </div>
       <span
         v-if="phaseLabel(phase, statusDetail ?? undefined)"
         class="chat-status"
         :class="{
           'chat-status--error': phase === 'failed',
-          'chat-status--busy': showProgress && phase !== 'failed',
-          'chat-status--ok': !showProgress,
+          'chat-status--busy': showProgress,
         }"
       >
         <span v-if="showProgress" class="spinner" aria-hidden="true" />
@@ -186,24 +276,35 @@ async function handleSubmit(e?: Event) {
 
     <div v-if="submitError" class="chat-error-banner" role="alert">{{ submitError }}</div>
 
-    <AgentGuidePanel v-if="!projectId" compact />
+    <div
+      v-if="chatMode === 'setup_required' && projectId"
+      class="chat-mode-banner"
+      role="status"
+    >
+      设计助手未连接，Web 对话暂不可用。
+      <button type="button" class="link-btn" @click="emit('openSetup')">连接设计助手</button>
+    </div>
 
-    <div v-if="showProgress" class="job-progress job-progress--4" aria-live="polite">
+    <div v-if="agentExternalUrl" class="chat-mode-banner" role="status">
+      助手会话：
+      <a :href="agentExternalUrl" target="_blank" rel="noopener">在外部查看</a>
+    </div>
+
+    <div v-if="showProgress" class="session-progress" aria-live="polite">
       <div
-        v-for="(label, i) in progressSteps"
-        :key="label"
-        class="job-step"
-        :class="{ active: isStepActive(i), done: isStepDone(i) }"
+        v-for="(step, i) in SESSION_STEPS"
+        :key="step.id"
+        class="session-step"
+        :class="{ active: currentStep === i, done: currentStep > i }"
       >
-        {{ label }}
+        {{ step.label }}
       </div>
     </div>
 
     <div class="chat-messages">
-      <div v-if="!projectId" class="chat-onboarding chat-onboarding--compact">
-        <p class="chat-hint">
-          在左侧创建项目后，在这里描述简单模型（立方体、盒子等）。复杂造型请用 Cursor Agent 或 MCP。
-        </p>
+      <div v-if="!projectId" class="chat-onboarding">
+        <p class="chat-hint-title">在这里描述，左侧看模型</p>
+        <p class="chat-hint">新建项目后，用一句话说尺寸和用途即可开始。</p>
         <div v-if="samplePrompts.length" class="prompt-chips prompt-chips--grid">
           <button
             v-for="text in samplePrompts"
@@ -222,10 +323,8 @@ async function handleSubmit(e?: Event) {
 
       <div v-else-if="messages.length === 0 && !busy" class="chat-onboarding">
         <template v-if="!hasModel">
-          <p class="chat-hint-title">简单几何：规则模板</p>
-          <p class="chat-hint">
-            立方体、盒子等可直接描述。复杂结构请在 Agent 中用 <code>notion3d_render_scad</code> 提交 SCAD。
-          </p>
+          <p class="chat-hint-title">说说你想做什么</p>
+          <p class="chat-hint">{{ modeHint }}</p>
           <div class="prompt-chips prompt-chips--grid">
             <button
               v-for="text in samplePrompts"
@@ -233,18 +332,18 @@ async function handleSubmit(e?: Event) {
               type="button"
               class="prompt-chip"
               :disabled="busy"
-              @click="input = text"
+              @click="useSample(text)"
             >
               {{ text }}
             </button>
           </div>
         </template>
         <template v-else>
-          <p class="chat-hint-title">模型已就绪，可以这样改</p>
+          <p class="chat-hint-title">继续迭代方案</p>
           <ul class="chat-tip-list">
-            <li>点选下方部位 + 说「加大一点」</li>
-            <li>直接说「孔加大」「整体缩小 10%」</li>
-            <li>在左侧参数面板拖动滑块</li>
+            <li>直接说：「孔加大」「整体缩小 10%」</li>
+            <li>在 3D 视图中点选位置，再描述修改</li>
+            <li>左侧可微调参数</li>
           </ul>
         </template>
       </div>
@@ -262,12 +361,9 @@ async function handleSubmit(e?: Event) {
         <p>{{ m.content }}</p>
       </div>
 
-      <div v-if="busy" class="chat-bubble chat-bubble--assistant chat-bubble--loading">
+      <div v-if="busy && sending" class="chat-bubble chat-bubble--assistant chat-bubble--loading">
         <span class="chat-role">助手</span>
-        <p>
-          <span class="spinner spinner--inline" aria-hidden="true" />
-          {{ phaseLabel(phase, statusDetail ?? undefined) ?? "处理中…" }}
-        </p>
+        <p><span class="spinner spinner--inline" aria-hidden="true" /> 收到，开始处理…</p>
       </div>
 
       <div ref="bottomRef" />
@@ -283,7 +379,7 @@ async function handleSubmit(e?: Event) {
             type="button"
             class="region-chip"
             :class="{ active: selectedRegion === r.label }"
-            :disabled="busy"
+            :disabled="!canSend"
             @click="selectedRegion = selectedRegion === r.label ? null : r.label"
           >
             {{ r.label }}
@@ -297,7 +393,7 @@ async function handleSubmit(e?: Event) {
           :key="hint"
           type="button"
           class="edit-hint-chip"
-          :disabled="busy"
+          :disabled="!canSend"
           @click="input = hint"
         >
           {{ hint }}
@@ -320,7 +416,7 @@ async function handleSubmit(e?: Event) {
         <span class="context-banner-dot" aria-hidden="true" />
         <span class="context-banner-text">
           <template v-if="pick">
-            3D 点选：<strong>{{ formatPickShort(pick) }}</strong>
+            点选位置：<strong>{{ formatPickShort(pick) }}</strong>
           </template>
           <template v-else>
             修改部位：<strong>{{ selectedRegion }}</strong>
@@ -341,13 +437,13 @@ async function handleSubmit(e?: Event) {
           v-model="input"
           :placeholder="inputPlaceholder"
           rows="2"
-          :disabled="busy"
+          :disabled="!canSend"
           @keydown.enter.exact.prevent="handleSubmit()"
         />
         <button
           type="submit"
           class="btn-primary chat-send-btn"
-          :disabled="busy || !input.trim()"
+          :disabled="!canSend || !input.trim()"
           aria-label="发送"
         >
           {{ busy ? "…" : "↑" }}
@@ -357,3 +453,47 @@ async function handleSubmit(e?: Event) {
     </form>
   </div>
 </template>
+
+<style scoped>
+.chat-mode-banner {
+  margin: 0 0 0.5rem;
+  padding: 0.55rem 0.75rem;
+  font-size: 0.82rem;
+  background: #f8fafc;
+  border-radius: 8px;
+  color: #475569;
+  line-height: 1.4;
+}
+.link-btn {
+  border: none;
+  background: none;
+  color: #2563eb;
+  cursor: pointer;
+  padding: 0 0.15rem;
+  font: inherit;
+  text-decoration: underline;
+}
+.session-progress {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 0.65rem;
+}
+.session-step {
+  text-align: center;
+  font-size: 0.72rem;
+  padding: 0.35rem 0.25rem;
+  border-radius: 6px;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+.session-step.active {
+  background: #dbeafe;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+.session-step.done {
+  background: #dcfce7;
+  color: #166534;
+}
+</style>

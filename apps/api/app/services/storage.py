@@ -7,7 +7,6 @@ from pathlib import Path
 from app.config import settings
 from app.models.schemas import MessageRole, ProjectOut
 from app.services.links import project_web_url
-from app.services.tracks.registry import tool_track
 
 
 def _utcnow() -> datetime:
@@ -27,12 +26,9 @@ def _messages_path(project_id: str) -> Path:
 
 
 def _project_from_meta(meta: dict) -> ProjectOut:
-    tool = meta.get("tool", "parametric")
     return ProjectOut(
         id=meta["id"],
         name=meta["name"],
-        tool=tool,
-        track=tool_track(tool).value,
         created_at=datetime.fromisoformat(meta["created_at"]),
         updated_at=datetime.fromisoformat(meta["updated_at"]),
         latest_version=meta.get("latest_version"),
@@ -40,17 +36,15 @@ def _project_from_meta(meta: dict) -> ProjectOut:
     )
 
 
-def create_project(name: str, tool: str = "parametric") -> ProjectOut:
+def create_project(name: str) -> ProjectOut:
     project_id = str(uuid.uuid4())
     root = _project_dir(project_id)
-    versions = root / "versions"
-    versions.mkdir(parents=True, exist_ok=True)
+    (root / "versions").mkdir(parents=True, exist_ok=True)
 
     now = _utcnow()
     meta = {
         "id": project_id,
         "name": name,
-        "tool": tool,
         "created_at": now.isoformat(),
         "updated_at": now.isoformat(),
         "latest_version": None,
@@ -78,17 +72,19 @@ def list_projects() -> list[ProjectOut]:
     return projects
 
 
+def load_meta(project_id: str) -> dict:
+    meta_file = _meta_path(project_id)
+    if not meta_file.exists():
+        raise ValueError("project not found")
+    return json.loads(meta_file.read_text())
+
+
 def get_project(project_id: str) -> ProjectOut | None:
     meta_file = _meta_path(project_id)
     if not meta_file.exists():
         return None
     meta = json.loads(meta_file.read_text())
     return _project_from_meta(meta)
-
-
-def get_project_tool(project_id: str) -> str:
-    project = get_project(project_id)
-    return project.tool if project else "parametric"
 
 
 def update_project_meta(project_id: str, **kwargs) -> None:

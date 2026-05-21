@@ -19,27 +19,15 @@ class MessageRole(str, Enum):
 
 class ProjectCreate(BaseModel):
     name: str = Field(default="未命名项目", max_length=128)
-    tool: str = Field(default="parametric", max_length=32)
 
 
 class ProjectOut(BaseModel):
     id: str
     name: str
-    tool: str = "parametric"
-    track: str = "parametric"
     created_at: datetime
     updated_at: datetime
     latest_version: int | None = None
     web_url: str | None = None
-
-
-class ToolOut(BaseModel):
-    id: str
-    track: str
-    title: str
-    description: str
-    available: bool
-    sample_prompts: list[str] = Field(default_factory=list)
 
 
 class VersionStatus(str, Enum):
@@ -54,7 +42,6 @@ class ModelVersionOut(BaseModel):
     stl_url: str | None = None
     scad_url: str | None = None
     preview_url: str | None = None
-    three_mf_url: str | None = None
     created_at: datetime
     prompt: str | None = None
 
@@ -69,8 +56,14 @@ class ModelPickIn(BaseModel):
     label: str | None = None
 
 
-class ChatMessageIn(BaseModel):
+class AgentTurnIn(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
+    pick: ModelPickIn | None = None
+    region: str | None = Field(default=None, max_length=64)
+
+
+class TemplateJobIn(BaseModel):
+    prompt: str = Field(min_length=1, max_length=8000)
     pick: ModelPickIn | None = None
     region: str | None = Field(default=None, max_length=64)
 
@@ -86,20 +79,36 @@ class ChatMessageOut(BaseModel):
 class JobOut(BaseModel):
     id: str
     project_id: str
+    kind: str | None = None
     status: JobStatus
+    phase: str | None = None
     prompt: str | None = None
     message: str | None = None
     version: int | None = None
     preview_url: str | None = None
     preview_ready: bool = False
     stl_ready: bool = False
+    error: str | None = None
     created_at: datetime
     updated_at: datetime
     web_url: str | None = None
 
 
-class GenerateRequest(BaseModel):
-    prompt: str = Field(min_length=1, max_length=8000)
+class AgentRunOut(BaseModel):
+    provider: str
+    session_id: str
+    run_id: str
+    status: str = "RUNNING"
+    external_url: str | None = None
+
+
+class TurnOut(BaseModel):
+    """Unified design turn — agent or blocked."""
+
+    routing: str  # agent | blocked
+    reason: str | None = None
+    agent: AgentRunOut | None = None
+    assistant_message_id: str | None = None
 
 
 class ScadRenderIn(BaseModel):
@@ -107,18 +116,46 @@ class ScadRenderIn(BaseModel):
     label: str = Field(default="手动编辑 SCAD", max_length=256)
 
 
+class AgentProviderOut(BaseModel):
+    id: str
+    title: str
+    kind: str
+    configured: bool
+    ready: bool
+    note: str = ""
+
+
+class AgentStatusOut(BaseModel):
+    active: bool
+    provider: str | None = None
+    session_id: str | None = None
+    run_id: str | None = None
+    status: str | None = None
+    external_url: str | None = None
+    active_job_id: str | None = None
+
+
+class ProjectCapabilitiesOut(BaseModel):
+    web_chat_mode: str  # agent | setup_required
+    assistant_label: str | None = None
+    assistant_ready: bool = False
+
+
+class ProjectStateOut(BaseModel):
+    project: ProjectOut
+    messages: list[ChatMessageOut]
+    active_job: JobOut | None = None
+    agent: AgentStatusOut
+    capabilities: ProjectCapabilitiesOut
+
+
 class HealthOut(BaseModel):
     status: str
     openscad_available: bool
-    slicer_available: bool
-    bambu_connect_available: bool
-    agent_via_mcp: bool = True
-    mcp_server: str = "notion3d"
     web_base_url: str = "http://localhost:5173"
-
-
-class ActionResult(BaseModel):
-    ok: bool
-    message: str
-    three_mf_url: str | None = None
-    bambu_connect_url: str | None = None
+    agent_provider: str = "auto"
+    agent_active: str | None = None
+    agent_bridge_ready: bool = False
+    agent_providers: list[AgentProviderOut] = Field(default_factory=list)
+    web_chat_mode: str = "setup_required"
+    assistant_label: str | None = None

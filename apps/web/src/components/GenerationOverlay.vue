@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { GenerationState } from "../types/generation";
-import { GENERATION_STEPS, phaseLabel, stepIndex } from "../types/generation";
+import { SESSION_STEPS, phaseLabel, stepIndex } from "../types/generation";
 
 const props = defineProps<{
   state: GenerationState;
@@ -49,7 +49,7 @@ const footnote = computed(() => {
 
       <ol class="gen-steps">
         <li
-          v-for="(step, i) in GENERATION_STEPS"
+          v-for="(step, i) in SESSION_STEPS"
           :key="step.id"
           class="gen-step"
           :class="{ done: activeStep > i, active: activeStep === i }"

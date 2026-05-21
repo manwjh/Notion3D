@@ -50,7 +50,9 @@ API Key 由 Agent 平台（Cursor / Claude Code / OpenClaw）管理，不在 Not
 | 方法 | 路径 |
 |------|------|
 | GET | `/health` |
-| POST | `/api/projects/{id}/chat` |
+| POST | `/api/projects/{id}/turn` |
+| POST | `/api/projects/{id}/jobs/template` |
+| GET | `/api/projects/{id}/agent/status` |
 | GET | `/api/projects/{id}/jobs/{job_id}` |
 | GET | `/api/projects/{id}/jobs/active` |
 | GET | `/api/projects/{id}/versions` |

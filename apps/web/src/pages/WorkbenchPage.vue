@@ -7,9 +7,11 @@ import {
   listVersions,
   resumeVersionStl,
   type Health,
+  type Job,
   type ModelVersion,
   type Project,
 } from "../api/client";
+import AssistantSetupPanel from "../components/AssistantSetupPanel.vue";
 import ChatPanel from "../components/ChatPanel.vue";
 import ExportMenu from "../components/ExportMenu.vue";
 import GenerationOverlay from "../components/GenerationOverlay.vue";
@@ -17,21 +19,13 @@ import ModelToolsPanel from "../components/ModelToolsPanel.vue";
 import ModelViewer from "../components/ModelViewer.vue";
 import NewProjectModal from "../components/NewProjectModal.vue";
 import ProjectLinkButton from "../components/ProjectLinkButton.vue";
+import ProjectStatusBar from "../components/ProjectStatusBar.vue";
 import SystemStatusButton from "../components/SystemStatusButton.vue";
 import WelcomeScreen from "../components/WelcomeScreen.vue";
-import WorkflowBar from "../components/WorkflowBar.vue";
 import { useActiveJob } from "../composables/useActiveJob";
 import { useProjectRoute } from "../composables/useProjectRoute";
+import { SAMPLE_PROMPTS } from "../strings/zh";
 import type { ModelPick } from "../types/pick";
-
-const SAMPLE_PROMPTS = [
-  "20mm 立方体",
-  "40×30×20mm 带孔盒子",
-  "直径 30mm 的球",
-  "手机支架，倾角 15°",
-];
-
-type WorkflowStep = "describe" | "preview" | "adjust" | "export";
 
 const projects = ref<Project[]>([]);
 const projectId = ref<string | null>(null);
@@ -39,14 +33,18 @@ const versions = ref<ModelVersion[]>([]);
 const selectedVersion = ref<number | null>(null);
 const sysHealth = ref<Health | null>(null);
 const showNewProject = ref(false);
+const showSetup = ref(false);
 const creatingProject = ref(false);
 const showAdvancedPick = ref(false);
 const pickMode = ref(false);
 const modelPick = ref<ModelPick | null>(null);
 const resumingStl = ref(false);
 const pendingPrompt = ref<string | null>(null);
+const pendingAutoSubmit = ref(false);
 const projectsLoaded = ref(false);
 const unknownProject = ref(false);
+const mobilePanel = ref<"studio" | "chat">("studio");
+const narrowLayout = ref(false);
 
 useProjectRoute(projectId);
 
@@ -110,6 +108,12 @@ async function refreshVersions() {
 }
 
 onMounted(() => {
+  const mq = window.matchMedia("(max-width: 900px)");
+  const syncLayout = () => {
+    narrowLayout.value = mq.matches;
+  };
+  syncLayout();
+  mq.addEventListener("change", syncLayout);
   refreshProjects().catch(console.error);
   refreshHealth();
   const healthTimer = setInterval(refreshHealth, 30000);
@@ -117,6 +121,7 @@ onMounted(() => {
   const onFocus = () => refreshProjects().catch(console.error);
   window.addEventListener("focus", onFocus);
   onUnmounted(() => {
+    mq.removeEventListener("change", syncLayout);
     clearInterval(healthTimer);
     clearInterval(projectTimer);
     window.removeEventListener("focus", onFocus);
@@ -144,6 +149,19 @@ async function handleCreateProject(name: string) {
   } finally {
     creatingProject.value = false;
   }
+}
+
+function onTryPrompt(text: string) {
+  pendingPrompt.value = text;
+  pendingAutoSubmit.value = true;
+  if (!projectId.value) {
+    showNewProject.value = true;
+    return;
+  }
+}
+
+function onTrackJob(job: Job, prompt: string) {
+  trackJob(job, prompt);
 }
 
 const active = computed(() => {
@@ -205,12 +223,7 @@ const hasModel = computed(
 
 const hasExportable = computed(() => Boolean(active.value?.stl_url));
 
-const workflowStep = computed<WorkflowStep>(() => {
-  if (hasExportable.value) return "export";
-  if (hasModel.value || previewPending.value) return "adjust";
-  if (jobBusy.value) return "preview";
-  return "describe";
-});
+const latestVersionNum = computed(() => active.value?.version ?? versions.value.at(-1)?.version ?? null);
 
 const currentProject = computed(() => projects.value.find((p) => p.id === projectId.value));
 
@@ -226,7 +239,7 @@ async function handleResumeStl() {
   resumingStl.value = true;
   try {
     const job = await resumeVersionStl(projectId.value, active.value.version);
-    await trackJob(job, job.prompt ?? `恢复 v${active.value.version}`);
+    await trackJob(job, job.prompt ?? `生成 3D v${active.value.version}`);
     await refreshAfterJob();
   } catch (err) {
     console.error(err);
@@ -256,9 +269,14 @@ function onModelPick(p: ModelPick) {
         <div class="brand-mark" aria-hidden="true"><span /><span /><span /></div>
         <div class="brand-text">
           <strong class="brand-title">Notion3D</strong>
-          <span class="brand-subtitle">OpenSCAD 工作台</span>
+          <span class="brand-subtitle">3D 设计工作台</span>
         </div>
-        <WorkflowBar :step="workflowStep" :busy="jobBusy" />
+        <ProjectStatusBar
+          :has-model="hasModel"
+          :has-exportable="hasExportable"
+          :busy="jobBusy"
+          :version="latestVersionNum"
+        />
       </div>
       <div class="topbar-actions">
         <div class="project-picker">
@@ -269,31 +287,54 @@ function onModelPick(p: ModelPick) {
           </select>
         </div>
         <button type="button" class="btn-secondary" @click="showNewProject = true">新建</button>
+        <button type="button" class="btn-ghost btn-ghost--compact" @click="showSetup = true">
+          助手
+        </button>
         <ProjectLinkButton :project-id="projectId" :web-url="currentProject?.web_url" />
         <ExportMenu v-if="hasExportable" :version="active" prominent />
         <SystemStatusButton :health="sysHealth" />
       </div>
     </header>
 
-    <main class="workspace workspace--studio">
+    <nav v-if="narrowLayout" class="mobile-panel-tabs" aria-label="工作区切换">
+      <button
+        type="button"
+        class="mobile-panel-tab"
+        :class="{ active: mobilePanel === 'studio' }"
+        @click="mobilePanel = 'studio'"
+      >
+        3D 预览
+      </button>
+      <button
+        type="button"
+        class="mobile-panel-tab"
+        :class="{ active: mobilePanel === 'chat' }"
+        @click="mobilePanel = 'chat'"
+      >
+        设计对话
+      </button>
+    </nav>
+
+    <main
+      class="workspace workspace--studio"
+      :class="{
+        'workspace--narrow': narrowLayout,
+        'workspace--show-studio': !narrowLayout || mobilePanel === 'studio',
+        'workspace--show-chat': !narrowLayout || mobilePanel === 'chat',
+      }"
+    >
       <section class="studio-pane">
         <WelcomeScreen
           v-if="!projectId"
-          :sample-prompts="SAMPLE_PROMPTS"
           @create-project="showNewProject = true"
-          @pick-prompt="
-            (text) => {
-              pendingPrompt = text;
-              showNewProject = true;
-            }
-          "
+          @try-prompt="onTryPrompt"
         />
 
         <template v-else>
           <div v-if="unknownProject" class="unknown-project-banner" role="alert">
-            找不到该项目。若 Agent 刚创建，请稍等刷新；或确认 API 已启动且 project id 正确。
+            找不到这个项目。若刚创建，请稍等片刻后刷新。
             <button type="button" class="btn-secondary btn-secondary--compact" @click="refreshProjects(projectId)">
-              刷新列表
+              刷新
             </button>
           </div>
           <div class="version-bar">
@@ -301,7 +342,7 @@ function onModelPick(p: ModelPick) {
               <div class="version-list">
                 <span class="version-label">{{ currentProject?.name ?? "项目" }}</span>
                 <em v-if="versions.length === 0 && !jobBusy" class="version-empty">
-                  等待第一次生成
+                  在右侧描述需求，模型会出现在这里
                 </em>
                 <button
                   v-for="v in versions"
@@ -315,11 +356,11 @@ function onModelPick(p: ModelPick) {
                   :title="v.prompt ?? undefined"
                   @click="selectedVersion = v.version"
                 >
-                  版本 {{ v.version }}
+                  v{{ v.version }}
                   <span
                     v-if="v.status === 'preview_ready'"
                     class="version-dot"
-                    aria-label="仅预览"
+                    aria-label="2D 初稿"
                   />
                 </button>
               </div>
@@ -331,7 +372,7 @@ function onModelPick(p: ModelPick) {
                   :disabled="resumingStl"
                   @click="handleResumeStl"
                 >
-                  {{ resumingStl ? "加载中…" : "加载 3D 模型" }}
+                  {{ resumingStl ? "生成中…" : "生成 3D 模型" }}
                 </button>
                 <button
                   type="button"
@@ -340,7 +381,7 @@ function onModelPick(p: ModelPick) {
                   :aria-pressed="showAdvancedPick"
                   @click="toggleAdvanced"
                 >
-                  高级
+                  精确修改
                 </button>
                 <button
                   v-if="showAdvancedPick"
@@ -353,7 +394,6 @@ function onModelPick(p: ModelPick) {
                 >
                   {{ pickMode ? "点选中…" : "3D 点选" }}
                 </button>
-                <ExportMenu v-if="hasExportable" :version="active" />
               </div>
             </div>
             <p v-if="active?.prompt" class="version-prompt" :title="active.prompt">
@@ -396,12 +436,19 @@ function onModelPick(p: ModelPick) {
           :sample-prompts="SAMPLE_PROMPTS"
           :has-model="hasModel"
           :initial-prompt="pendingPrompt"
+          :auto-submit-initial="pendingAutoSubmit"
           :pick="modelPick"
           :generation="generation"
-          :track-job="trackJob"
-          @consume-initial-prompt="pendingPrompt = null"
+          :health="sysHealth"
+          @consume-initial-prompt="
+            pendingPrompt = null;
+            pendingAutoSubmit = false;
+          "
           @request-project="showNewProject = true"
           @clear-pick="modelPick = null"
+          @turn-complete="refreshAfterJob"
+          @track-job="onTrackJob"
+          @open-setup="showSetup = true"
         />
       </aside>
     </main>
@@ -409,9 +456,10 @@ function onModelPick(p: ModelPick) {
     <NewProjectModal
       :open="showNewProject"
       :busy="creatingProject"
-      :sample-prompts="SAMPLE_PROMPTS"
       @close="showNewProject = false"
       @submit="handleCreateProject"
     />
+
+    <AssistantSetupPanel :open="showSetup" :health="sysHealth" @close="showSetup = false" />
   </div>
 </template>
