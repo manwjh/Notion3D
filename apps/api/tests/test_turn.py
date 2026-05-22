@@ -34,8 +34,14 @@ def test_turn_routes_agent_when_adapter_ready(client, project_id, monkeypatch):
     assert res.status_code == 200
     body = res.json()
     assert body["routing"] == "agent"
+    assert body["turn_id"]
+    assert body["assistant_message_id"] is None
     assert body["agent"]["provider"] == "fake"
     assert body["agent"]["run_id"] == "run-1"
+
+    state = client.get(f"/api/projects/{project_id}/state").json()
+    assistant_texts = [m["content"] for m in state["messages"] if m["role"] == "assistant"]
+    assert not any("理解需求并建模" in t for t in assistant_texts)
 
 
 def test_turn_blocked_on_agent_error(client, project_id, monkeypatch):

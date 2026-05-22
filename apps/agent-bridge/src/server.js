@@ -94,9 +94,7 @@ async function executeRun(logicalId, prompt, runId) {
       }
       const outcome = await run.wait();
       const text = (outcome.result || parts.join("")).trim();
-      entry.result =
-        text ||
-        "Cursor SDK Agent 已完成。若已提交建模，请查看左侧 3D 预览。";
+      entry.result = text;
       entry.status =
         outcome.status === "finished"
           ? "FINISHED"

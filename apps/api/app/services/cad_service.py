@@ -114,6 +114,11 @@ def _apply_simple_edit(scad: str, prompt: str, region: str | None = None) -> str
     return scad + f"\n// edit: {prompt}\n"
 
 
+def _openscad_stderr_is_fatal(stderr_text: str) -> bool:
+    lowered = stderr_text.lower()
+    return "error:" in stderr_text or "mesh is not closed" in lowered
+
+
 async def render_stl(scad_code: str, output_stl: Path) -> Path:
     if not openscad_available():
         raise CadError(
@@ -133,8 +138,11 @@ async def render_stl(scad_code: str, output_stl: Path) -> Path:
         stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
+    stderr_text = stderr.decode()
     if proc.returncode != 0:
-        raise CadError(stderr.decode() or stdout.decode() or "OpenSCAD 渲染失败")
+        raise CadError(stderr_text or stdout.decode() or "OpenSCAD 渲染失败")
+    if _openscad_stderr_is_fatal(stderr_text):
+        raise CadError(stderr_text.strip() or "OpenSCAD 几何体无效（非封闭网格）")
 
     if not output_stl.exists():
         raise CadError("OpenSCAD 未生成 STL 文件")
@@ -143,7 +151,7 @@ async def render_stl(scad_code: str, output_stl: Path) -> Path:
 
 
 async def render_preview_png(scad_code: str, output_png: Path) -> Path | None:
-    """Optional PNG preview via OpenSCAD."""
+    """Legacy PNG export — not used in Web preview pipeline (OpenSCAD --preview is low quality)."""
     if not openscad_available():
         return None
     scad_path = output_png.with_suffix(".scad")

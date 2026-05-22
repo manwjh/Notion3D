@@ -7,19 +7,25 @@ from fastapi.responses import FileResponse
 from app.models.schemas import (
     ChatMessageOut,
     JobOut,
+    JobSource,
     ModelVersionOut,
     ProjectCreate,
     ProjectOut,
+    SaveTemplateIn,
     ScadRenderIn,
     TemplateJobIn,
+    TemplateOut,
+    TemplateParamOut,
     VersionStatus,
 )
 from app.services import (
     cad_service,
     chat_present,
+    design_turn,
     job_service,
     job_store,
     storage,
+    template_library,
 )
 from app.services.job_present import job_to_out as _job_to_out
 
@@ -81,6 +87,8 @@ def _version_out(project_id: str, v: int, out_dir) -> ModelVersionOut:
         ),
         created_at=_version_created_at(out_dir),
         prompt=meta.get("prompt"),
+        turn_id=meta.get("turn_id"),
+        job_id=meta.get("job_id"),
     )
 
 
@@ -145,7 +153,18 @@ async def render_scad(
     if not storage.get_project(project_id):
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    job = job_service.create_render_job(project_id, body.scad_code, body.label)
+    source = body.source.value
+    turn_id = design_turn.active_turn_id(project_id) if source == JobSource.agent.value else None
+
+    job = job_service.create_render_job(
+        project_id,
+        body.scad_code,
+        body.label,
+        turn_id=turn_id,
+        source=source,
+    )
+    if turn_id:
+        design_turn.register_job(project_id, turn_id, job["id"])
     background_tasks.add_task(job_service.run_render_scad_job, job["id"])
     return _job_to_out(job)
 
@@ -224,3 +243,48 @@ async def download_preview(project_id: str, version: int) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="预览图不存在")
     return FileResponse(path, media_type="image/png")
+
+
+@router.post("/{project_id}/versions/{version}/save-template", response_model=TemplateOut)
+async def save_version_as_template(
+    project_id: str,
+    version: int,
+    body: SaveTemplateIn,
+) -> TemplateOut:
+    if not storage.get_project(project_id):
+        raise HTTPException(status_code=404, detail="项目不存在")
+
+    scad_path = storage.version_dir(project_id, version) / "model.scad"
+    if not scad_path.exists():
+        raise HTTPException(status_code=404, detail="该版本尚无 SCAD")
+
+    scad_code = scad_path.read_text(encoding="utf-8")
+    try:
+        meta = template_library.save_user_template(
+            template_id=body.id,
+            title=body.title,
+            scad_code=scad_code,
+            description=body.description,
+            tags=body.tags,
+            category=body.category,
+            derived_from={
+                "project_id": project_id,
+                "version": version,
+            },
+        )
+    except template_library.TemplateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except cad_service.CadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    return TemplateOut(
+        id=meta["id"],
+        title=meta["title"],
+        description=meta.get("description"),
+        tags=meta.get("tags") or [],
+        category=meta.get("category"),
+        license=meta.get("license"),
+        source=meta.get("source"),
+        scope=meta["scope"],
+        params=[TemplateParamOut(**p) for p in meta.get("params") or []],
+    )

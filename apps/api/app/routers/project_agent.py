@@ -11,8 +11,9 @@ from app.models.schemas import (
     ProjectStateOut,
     TurnOut,
 )
-from app.services import storage
-from app.services.capabilities import capabilities as project_capabilities
+from app.services import design_turn, storage
+from app.services.agents import refresh_provider_cache
+from app.services.capabilities import capabilities_async as project_capabilities_async
 from app.services.chat_present import agent_status_out, messages_out
 from app.services.job_present import job_to_out
 from app.services import turn_service
@@ -25,7 +26,7 @@ def _start_agent(project_id: str, pending: dict, background_tasks: BackgroundTas
 
 
 @router.post("/{project_id}/turn", response_model=TurnOut)
-async def design_turn(
+async def submit_turn(
     project_id: str,
     body: AgentTurnIn,
     background_tasks: BackgroundTasks,
@@ -57,11 +58,12 @@ async def project_state(project_id: str) -> ProjectStateOut:
         raise HTTPException(status_code=404, detail="项目不存在")
 
     active_job = turn_service.active_job_for_project(project_id)
-    caps = project_capabilities()
+    caps = await project_capabilities_async()
 
     return ProjectStateOut(
         project=project,
         messages=messages_out(project_id),
+        active_turn=design_turn.turn_out(project_id, active_job),
         active_job=job_to_out(active_job) if active_job else None,
         agent=agent_status_out(project_id),
         capabilities=ProjectCapabilitiesOut(**caps),

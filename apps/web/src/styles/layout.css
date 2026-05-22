@@ -5,6 +5,7 @@
   height: 100dvh;
   min-height: 0;
   overflow: hidden;
+  overflow-x: clip;
 }
 
 .topbar {
@@ -13,7 +14,11 @@
   justify-content: space-between;
   gap: 0.65rem;
   flex-wrap: wrap;
-  padding: 0.55rem 0.85rem;
+  padding:
+    max(0.55rem, env(safe-area-inset-top))
+    max(0.85rem, env(safe-area-inset-right))
+    0.55rem
+    max(0.85rem, env(safe-area-inset-left));
   border-bottom: 1px solid var(--border);
   background: linear-gradient(180deg, #151920 0%, #12151c 100%);
   flex-shrink: 0;
@@ -70,13 +75,29 @@
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(280px, 32vw, 400px);
+  grid-template-columns: clamp(360px, 32vw, 480px) minmax(0, 1fr);
   min-height: 0;
   overflow: hidden;
 }
 
-.workspace--studio {
-  grid-template-columns: minmax(0, 1fr) clamp(300px, 30vw, 420px);
+.workspace--agent-first {
+  grid-template-columns: clamp(360px, 32vw, 480px) minmax(0, 1fr);
+}
+
+.studio-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+
+.chat-pane {
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.12);
 }
 
 .brand-mark {
@@ -136,14 +157,6 @@
 }
 
 
-.studio-pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
 .studio-stack {
   flex: 1;
   display: flex;
@@ -192,7 +205,17 @@
   overflow: hidden;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1100px) {
+  .agent-status {
+    display: none;
+  }
+
+  .workspace--agent-first {
+    grid-template-columns: minmax(280px, 38vw) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 1024px) {
   .mobile-panel-tabs {
     display: flex;
   }
@@ -211,41 +234,37 @@
   }
 
   .chat-pane {
-    border-left: none;
-    border-top: none;
+    border-right: none;
+    box-shadow: none;
     min-height: 0;
   }
 
-
-  .project-status {
-    display: none;
-  }
-
-  .welcome-screen {
-    padding: 1.25rem 1rem;
-    gap: 1.25rem;
-    justify-content: flex-start;
-  }
-
   .model-tools-panel {
-    max-height: min(36vh, 280px);
+    max-height: none;
+    flex: 1;
+  }
+
+  .topbar-actions {
+    flex: 1 1 100%;
+    justify-content: flex-end;
+  }
+
+  .project-picker {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .project-picker select {
+    width: 100%;
+    max-width: none;
   }
 }
 
-@media (max-width: 1100px) {
-  .workspace--studio {
-    grid-template-columns: minmax(0, 1fr) minmax(260px, 34vw);
+@media (max-width: 1280px) and (min-width: 1025px) {
+  .agent-status-text {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 }
-
-@media (max-width: 1280px) and (min-width: 901px) {
-  .project-status-item {
-    font-size: 0.68rem;
-    padding: 0.15rem 0.35rem;
-  }
-
-  .project-status-meta {
-    display: none;
-  }
-}
-

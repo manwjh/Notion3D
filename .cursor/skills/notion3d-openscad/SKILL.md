@@ -37,10 +37,11 @@ Task Progress:
 - [ ] 1. notion3d_health — 确认 API + OpenSCAD 就绪
 - [ ] 2. notion3d_create_project（或选用已有 project_id）
 - [ ] 3. 你生成 OpenSCAD → notion3d_render_scad（首选）
-      或简单几何 → notion3d_template（Engine 规则模板，无 LLM）
-- [ ] 4. notion3d_wait_job 或轮询 notion3d_get_job（预览→STL 两阶段）
-- [ ] 5. notion3d_list_versions — 确认 version / preview_url / stl_url
-- [ ] 6. （可选）本地 validate.sh / multi-preview.sh 复核 SCAD
+      或 notion3d_list_templates → apply / 改参后 render
+      或简单几何 → notion3d_template（Engine 规则模板，无 LLM，dev only）
+- [ ] 4. notion3d_wait_job 或轮询 notion3d_get_job（等待 STL）
+- [ ] 5. notion3d_list_versions — 确认 version / stl_url
+- [ ] 6. （可选）本地 validate.sh 复核 SCAD（复杂件推荐）
 ```
 
 **API Key 由 Agent 平台管理**（Cursor / Claude Code / OpenClaw），不在 Web 或 Notion3D API 配置。
@@ -66,14 +67,13 @@ Web 与 Agent **不直连**，共享同一 API / `data/projects/`。用户也可
 
 ## Web 工作台（Vue 3）
 
-Web 是 **可视化工作台**，不是第二个 Agent：
+Web 是 **Agent 驱动的观察面**，不是第二个 Agent：
 
-1. **Agent 建模**：你在 MCP 中 `notion3d_render_scad`（复杂件）或 `notion3d_template`（简单模板）
-2. **打开 web_url**：用户预览、旋转 3D、导出 STL
-3. **快速调整**：右侧规则模板 + 语义部位 + 左侧参数滑块
-4. **高级**：3D 点选、OpenSCAD 源码在「高级代码」Tab
+1. **对话区**：采集意图（含 3D 点选），创建 Design Turn，转发 Agent
+2. **预览区**：随 Job 更新显示 STL；旋转、点选、导出
+3. **高级编辑**：手动 SCAD（`source=manual`），明确标注不经过助手
 
-Agent 调 API 时可用 `region` 字段（与 Web 部位芯片一致），例如 `region="孔"` + `content="加大一点"`。
+Agent 经 MCP 提交的 Job 自动绑定 `active_turn`；版本与对话通过 `turn_id` / `job_id` 关联。
 
 ## 写 OpenSCAD 规范
 
@@ -83,6 +83,26 @@ Agent 调 API 时可用 `region` 字段（与 Web 部位芯片一致），例如
 - **禁止**：`import`/`include` 外部文件、绝对路径
 - **尺寸**：默认整件适合 20–120mm 打印床；复杂件控制 `$fn`（预览 24–32，最终 48–64）
 - **输出**：仅 OpenSCAD 源码（可用 ` ```openscad ` 包裹）
+
+## 模板库
+
+内置 SCAD 模板在仓库 `templates/builtin/`；用户另存在 `data/templates/user/`。
+
+| MCP Tool | 说明 |
+|----------|------|
+| `notion3d_list_templates` | 浏览（tag / category / scope） |
+| `notion3d_get_template` | 取 SCAD + meta |
+| `notion3d_apply_template` | 应用到项目（可新建） |
+| `notion3d_save_template` | 从 version 另存到用户库 |
+
+复杂定制：`get_template` → 改 SCAD → `render_scad`，不要往 Engine 代码里写领域特例。
+
+## 机械件（齿轮等）
+
+- **不要**用简单梯形 polygon 近似齿形（易产生非封闭网格）
+- **齿轮副/啮合**：渐开线齿廓 + 按中心距装配；齿数比 = 转速比
+- 完整范例见 [examples.md](examples.md)「10:1 啮合齿轮副」
+- API `render_stl` 会拒绝 stderr 含 `ERROR:` / `mesh is not closed` 的 SCAD
 
 ## 本地校验脚本
 

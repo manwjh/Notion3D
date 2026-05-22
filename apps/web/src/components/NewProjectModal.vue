@@ -11,12 +11,6 @@ const emit = defineEmits<{ close: []; submit: [name: string] }>();
 const projectName = ref("我的模型");
 const inputRef = ref<HTMLInputElement | null>(null);
 
-const templates = [
-  { name: "我的盒子", icon: "📦" },
-  { name: "定制零件", icon: "⚙️" },
-  { name: "装饰摆件", icon: "✨" },
-];
-
 watch(
   () => props.open,
   async (v) => {
@@ -40,27 +34,13 @@ function handleSubmit(e: Event) {
 <template>
   <div v-if="open" class="modal-backdrop" role="presentation" @click="emit('close')">
     <div
-      class="modal-card modal-card--wide"
+      class="modal-card"
       role="dialog"
       aria-labelledby="new-project-title"
       @click.stop
     >
       <h3 id="new-project-title">新建设计项目</h3>
-      <p class="modal-desc">取个名字即可。创建后在右侧用一句话描述想要的 3D 物件。</p>
-
-      <div class="modal-templates">
-        <button
-          v-for="t in templates"
-          :key="t.name"
-          type="button"
-          class="modal-template-btn"
-          :disabled="busy"
-          @click="projectName = t.name"
-        >
-          <span aria-hidden="true">{{ t.icon }}</span>
-          {{ t.name }}
-        </button>
-      </div>
+      <p class="modal-desc">取个名字即可。创建后在对话区描述想要的 3D 物件。</p>
 
       <form @submit="handleSubmit">
         <label class="modal-field-label" for="project-name">项目名称</label>

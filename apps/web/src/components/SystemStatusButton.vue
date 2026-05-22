@@ -42,7 +42,7 @@ function modeLabel(health: Health | null) {
     </button>
     <div v-if="open" class="sys-status-popover" role="dialog" aria-label="连接状态">
       <p class="sys-status-title">连接状态</p>
-      <p v-if="!health" class="sys-status-empty">无法连接服务，请运行 make dev 启动。</p>
+      <p v-if="!health" class="sys-status-empty">无法连接服务，请运行 make dev AGENT=… 启动。</p>
       <ul v-else class="sys-status-list">
         <li :class="health.openscad_available ? 'ok' : 'warn'">
           <span class="sys-status-item-dot" aria-hidden="true" />

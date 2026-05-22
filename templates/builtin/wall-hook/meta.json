@@ -1,0 +1,15 @@
+{
+  "id": "wall-hook",
+  "title": "壁挂挂钩",
+  "description": "L 形挂钩 + 背板，适合挂钥匙、耳机、轻小物件",
+  "tags": ["挂钩", "壁挂", "实用"],
+  "category": "utility",
+  "license": "MIT",
+  "source": "notion3d-builtin",
+  "params": [
+    { "name": "hook_w", "label": "钩宽", "default": 18, "unit": "mm" },
+    { "name": "hook_d", "label": "钩深", "default": 22, "unit": "mm" },
+    { "name": "wall", "label": "壁厚", "default": 2.0, "unit": "mm" },
+    { "name": "back_h", "label": "背板高度", "default": 35, "unit": "mm" }
+  ]
+}

@@ -18,6 +18,8 @@
 - markdown 代码块需正确包裹（LLM 输出会自动剥离）
 - `import`/`include` 绝对路径
 
+`render_stl` 会拒绝 OpenSCAD stderr 中的 `ERROR:` 或非封闭网格（`mesh is not closed`），即使 exit code 为 0。
+
 ## 任务分类关键词
 
 **A 类**：立方体、球、圆柱、盒子、孔、mm、尺寸、支架、外壳、盖子
@@ -50,6 +52,9 @@ API Key 由 Agent 平台（Cursor / Claude Code / OpenClaw）管理，不在 Not
 | 方法 | 路径 |
 |------|------|
 | GET | `/health` |
+| GET | `/api/templates` |
+| GET | `/api/templates/{id}` |
+| POST | `/api/templates/{id}/apply` |
 | POST | `/api/projects/{id}/turn` |
 | POST | `/api/projects/{id}/jobs/template` |
 | GET | `/api/projects/{id}/agent/status` |
@@ -57,6 +62,7 @@ API Key 由 Agent 平台（Cursor / Claude Code / OpenClaw）管理，不在 Not
 | GET | `/api/projects/{id}/jobs/active` |
 | GET | `/api/projects/{id}/versions` |
 | POST | `/api/projects/{id}/render-scad` |
+| POST | `/api/projects/{id}/versions/{v}/save-template` |
 | POST | `/api/projects/{id}/versions/{v}/resume-stl` |
 
 ## MCP Tools

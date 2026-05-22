@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, onUnmounted, ref, watch } from "vue";
+import { nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
@@ -8,14 +8,16 @@ import { describePick, type ModelPick } from "../types/pick";
 const props = withDefaults(
   defineProps<{
     stlUrl: string | null;
-    previewUrl?: string | null;
-    previewPending?: boolean;
+    loading?: boolean;
+    loadingLabel?: string | null;
+    legacyIncomplete?: boolean;
     pickMode?: boolean;
     pick?: ModelPick | null;
   }>(),
   {
-    previewUrl: null,
-    previewPending: false,
+    loading: false,
+    loadingLabel: null,
+    legacyIncomplete: false,
     pickMode: false,
     pick: null,
   },
@@ -25,7 +27,7 @@ const emit = defineEmits<{ pick: [value: ModelPick] }>();
 
 const canvasHost = ref<HTMLElement | null>(null);
 const error = ref<string | null>(null);
-const loading = ref(false);
+const meshLoading = ref(false);
 
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
@@ -37,6 +39,18 @@ let grid: THREE.GridHelper | null = null;
 let animId = 0;
 let raycaster = new THREE.Raycaster();
 let pointer = new THREE.Vector2();
+
+function alignGeometryOnBuildPlate(geometry: THREE.BufferGeometry) {
+  geometry.rotateX(-Math.PI / 2);
+  geometry.computeBoundingBox();
+  const box = geometry.boundingBox;
+  if (!box) return;
+  const centerX = (box.min.x + box.max.x) / 2;
+  const centerZ = (box.min.z + box.max.z) / 2;
+  geometry.translate(-centerX, -box.min.y, -centerZ);
+  geometry.computeVertexNormals();
+  geometry.computeBoundingSphere();
+}
 
 function fitCamera(geometry: THREE.BufferGeometry) {
   if (!camera || !controls) return;
@@ -110,16 +124,13 @@ function disposeMesh() {
 
 async function loadStl(url: string) {
   if (!scene) return;
-  loading.value = true;
+  meshLoading.value = true;
   error.value = null;
   disposeMesh();
   try {
     const loader = new STLLoader();
     const geo = await loader.loadAsync(url);
-    geo.rotateX(-Math.PI / 2);
-    geo.computeVertexNormals();
-    geo.center();
-    geo.computeBoundingSphere();
+    alignGeometryOnBuildPlate(geo);
     mesh = new THREE.Mesh(
       geo,
       new THREE.MeshStandardMaterial({
@@ -135,7 +146,7 @@ async function loadStl(url: string) {
   } catch (e) {
     error.value = e instanceof Error ? e.message : "模型加载失败";
   } finally {
-    loading.value = false;
+    meshLoading.value = false;
   }
 }
 
@@ -176,8 +187,18 @@ function animate() {
   if (renderer && scene && camera) renderer.render(scene, camera);
 }
 
+function resizeRenderer() {
+  if (!canvasHost.value || !renderer || !camera) return;
+  const w = canvasHost.value.clientWidth;
+  const h = canvasHost.value.clientHeight;
+  if (w <= 0 || h <= 0) return;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h, false);
+}
+
 function initThree() {
-  if (!canvasHost.value) return;
+  if (!canvasHost.value || scene) return;
   scene = new THREE.Scene();
   scene.background = new THREE.Color("#141820");
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
@@ -209,20 +230,20 @@ function initThree() {
   renderer.domElement.addEventListener("pointermove", onPointerMove);
   renderer.domElement.addEventListener("pointerleave", onPointerLeave);
 
-  const ro = new ResizeObserver(() => {
-    if (!canvasHost.value || !renderer || !camera) return;
-    const w = canvasHost.value.clientWidth;
-    const h = canvasHost.value.clientHeight;
-    if (w <= 0 || h <= 0) return;
-    camera.aspect = w / h;
-    camera.updateProjectionMatrix();
-    renderer.setSize(w, h, false);
-  });
+  const ro = new ResizeObserver(resizeRenderer);
   ro.observe(canvasHost.value);
   (canvasHost.value as HTMLElement & { _ro?: ResizeObserver })._ro = ro;
 
   animate();
-  if (props.stlUrl) loadStl(props.stlUrl);
+  resizeRenderer();
+  if (props.stlUrl) void loadStl(props.stlUrl);
+}
+
+async function ensureViewerReady() {
+  await nextTick();
+  initThree();
+  resizeRenderer();
+  if (props.stlUrl && scene) await loadStl(props.stlUrl);
 }
 
 function destroyThree() {
@@ -253,8 +274,16 @@ watch(
   () => props.stlUrl,
   (url) => {
     error.value = null;
-    if (url && scene) loadStl(url);
-    else disposeMesh();
+    void ensureViewerReady().then(() => {
+      if (!url) disposeMesh();
+    });
+  },
+);
+
+watch(
+  () => props.loading,
+  () => {
+    if (props.stlUrl) void ensureViewerReady();
   },
 );
 
@@ -277,59 +306,108 @@ watch(
   },
 );
 
-onMounted(initThree);
+onMounted(() => {
+  void ensureViewerReady();
+});
 onUnmounted(destroyThree);
 </script>
 
 <template>
-  <div
-    v-if="!stlUrl && previewUrl && previewPending"
-    class="viewer-root viewer-root--preview-pending"
-  >
-    <img class="viewer-fallback" :src="previewUrl" alt="模型预览" />
-    <div class="viewer-preview-badge">
-      <span class="spinner spinner--inline" aria-hidden="true" />
-      预览已就绪 · 正在加载 3D 模型…
+  <div class="viewer-shell">
+    <div
+      ref="canvasHost"
+      class="viewer-root viewer-root--canvas"
+      :class="{ 'viewer-root--pick': pickMode, 'viewer-root--hidden': !stlUrl }"
+    >
+      <div v-if="pickMode" class="viewer-pick-hint">点击模型表面，回对话区描述修改</div>
+      <p v-if="error" class="viewer-error">{{ error }}</p>
+      <span v-if="meshLoading" class="viewer-loading viewer-loading--overlay">加载模型…</span>
     </div>
-  </div>
 
-  <div v-else-if="!stlUrl && previewUrl" class="viewer-root viewer-root--preview-only">
-    <img class="viewer-fallback" :src="previewUrl" alt="模型预览" />
-    <div class="viewer-preview-badge viewer-preview-badge--static">模型预览</div>
-  </div>
-
-  <div v-else-if="!stlUrl" class="viewer-root">
-    <div class="viewer-empty">
-      <div class="viewer-empty-icon" aria-hidden="true"><span /><span /><span /></div>
-      <p>模型将在这里显示</p>
-      <span>在右侧描述想要的造型，生成后先看预览图，再加载可旋转的 3D 模型</span>
+    <div v-if="loading && !stlUrl" class="viewer-overlay viewer-root viewer-root--loading">
+      <div class="viewer-loading-card">
+        <span class="spinner" aria-hidden="true" />
+        <p>{{ loadingLabel ?? "正在生成 3D 模型…" }}</p>
+        <span class="viewer-loading-hint">完成后可在此旋转观察、点选修改</span>
+      </div>
     </div>
-  </div>
 
-  <div v-else-if="error && previewUrl" class="viewer-root">
-    <img class="viewer-fallback" :src="previewUrl" alt="模型预览" />
-    <p class="viewer-error">{{ error }}（已显示预览图）</p>
-  </div>
+    <div v-else-if="legacyIncomplete && !stlUrl" class="viewer-overlay viewer-root viewer-root--legacy">
+      <div class="viewer-empty">
+        <p>此版本缺少 3D 模型</p>
+        <span>这是旧版未完成的数据。请用右上角 ⋯ →「生成可打印模型」补全。</span>
+      </div>
+    </div>
 
-  <div
-    v-else
-    ref="canvasHost"
-    class="viewer-root viewer-root--canvas"
-    :class="{ 'viewer-root--pick': pickMode }"
-  >
-    <div v-if="pickMode" class="viewer-pick-hint">点击模型表面，然后在右侧描述修改</div>
-    <img v-if="previewUrl" class="viewer-thumb" :src="previewUrl" alt="模型预览" />
-    <p v-if="error" class="viewer-error">{{ error }}</p>
-    <span v-if="loading" class="viewer-loading viewer-loading--overlay">加载模型…</span>
+    <div v-else-if="!stlUrl" class="viewer-overlay viewer-root">
+      <div class="viewer-empty">
+        <div class="viewer-empty-icon" aria-hidden="true"><span /><span /><span /></div>
+        <p>暂无图纸</p>
+        <span>在对话区描述需求，3D 模型生成后会显示在这里</span>
+      </div>
+    </div>
   </div>
 </template>
 
 <style scoped>
+.viewer-shell {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+}
+
+.viewer-root--hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.viewer-shell .viewer-root {
+  flex: 1;
+  min-height: 200px;
+}
+
 .viewer-root--canvas {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 200px;
+}
+
+.viewer-root--loading,
+.viewer-root--legacy {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-loading-card {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1.5rem;
+}
+
+.viewer-loading-card p {
+  margin: 0;
+  color: #c5cad6;
+  font-size: 0.95rem;
+}
+
+.viewer-loading-hint {
+  color: #6b7280;
+  font-size: 0.82rem;
+  max-width: 280px;
+  line-height: 1.45;
 }
 
 .viewer-loading--overlay {

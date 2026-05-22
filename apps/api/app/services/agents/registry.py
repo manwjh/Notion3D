@@ -1,40 +1,35 @@
-"""Agent adapters — OpenClaw + Cursor SDK local + Cursor Cloud API (not IDE)."""
+"""Agent adapter registry — cursor_sdk + hermes."""
 
 from __future__ import annotations
 
 from app.config import settings
 from app.services.agents.base import AgentAdapter, AgentProviderInfo
-from app.services.agents.cursor_cloud import CursorCloudAdapter
 from app.services.agents.cursor_sdk import CursorSdkAdapter
-from app.services.agents.openclaw import OpenClawAdapter
+from app.services.agents.hermes import HermesAdapter
 
 _ADAPTERS: dict[str, AgentAdapter] = {
-    "openclaw": OpenClawAdapter(),
     "cursor_sdk": CursorSdkAdapter(),
-    "cursor_cloud": CursorCloudAdapter(),
+    "hermes": HermesAdapter(),
 }
 
-# 有 CURSOR_API_KEY 时优先 SDK local（无需 tunnel），其次 OpenClaw，最后 Cloud API
-_AUTO_ORDER = ("cursor_sdk", "openclaw", "cursor_cloud")
-
-_sdk_adapter = _ADAPTERS["cursor_sdk"]
-_sdk_ready_cache: bool | None = None
+_ready_cache: dict[str, bool | None] = {aid: None for aid in _ADAPTERS}
 
 
-async def _cursor_sdk_ready() -> bool:
-    global _sdk_ready_cache
-    if isinstance(_sdk_adapter, CursorSdkAdapter):
-        info = await _sdk_adapter.info_ready()
-        _sdk_ready_cache = info.ready
-        return info.ready
-    return False
+async def _refresh_adapter_ready(adapter_id: str) -> bool:
+    adapter = _ADAPTERS[adapter_id]
+    if hasattr(adapter, "info_ready"):
+        info = await adapter.info_ready()
+        ready = info.ready
+    else:
+        ready = adapter.info().ready
+    _ready_cache[adapter_id] = ready
+    return ready
 
 
 def _adapter_ready_sync(adapter: AgentAdapter) -> bool:
-    if adapter.id == "cursor_sdk":
-        if _sdk_ready_cache is not None:
-            return _sdk_ready_cache
-        return adapter.info().configured and bool(settings.cursor_sdk_bridge_base)
+    cached = _ready_cache.get(adapter.id)
+    if cached is not None:
+        return cached
     return adapter.info().ready
 
 
@@ -43,40 +38,49 @@ def get_adapter(provider_id: str) -> AgentAdapter | None:
 
 
 def list_provider_info() -> list[AgentProviderInfo]:
-    items: list[AgentProviderInfo] = []
+    providers: list[AgentProviderInfo] = []
     for adapter in _ADAPTERS.values():
         info = adapter.info()
-        if adapter.id == "cursor_sdk":
-            info = AgentProviderInfo(
+        ready = _adapter_ready_sync(adapter)
+        note = "" if ready else info.note
+        providers.append(
+            AgentProviderInfo(
                 id=info.id,
                 title=info.title,
                 kind=info.kind,
                 configured=info.configured,
-                ready=_adapter_ready_sync(adapter),
-                note=info.note,
+                ready=ready,
+                note=note,
             )
-        items.append(info)
-    return items
+        )
+    return providers
 
 
 async def refresh_provider_cache() -> None:
-    await _cursor_sdk_ready()
+    for adapter_id in _ADAPTERS:
+        await _refresh_adapter_ready(adapter_id)
 
 
 def resolve_adapter(preferred: str | None = None) -> AgentAdapter | None:
-    choice = (preferred or settings.agent_provider or "auto").strip().lower()
-    if choice != "auto":
-        adapter = get_adapter(choice)
-        return adapter if adapter and _adapter_ready_sync(adapter) else None
-    for pid in _AUTO_ORDER:
-        adapter = _ADAPTERS[pid]
-        if _adapter_ready_sync(adapter):
-            return adapter
-    return None
+    choice = (preferred or settings.agent_provider or "cursor_sdk").strip().lower()
+    if choice in ("engine", "none", "off"):
+        return None
+    adapter = _ADAPTERS.get(choice)
+    if not adapter:
+        return None
+    if _ready_cache.get(choice) is False:
+        return None
+    if _ready_cache.get(choice) is not True:
+        return None
+    return adapter
 
 
 def bridge_ready() -> bool:
-    return _sdk_ready_cache is True
+    """Sidecar / gateway for the active configured provider."""
+    choice = (settings.agent_provider or "cursor_sdk").strip().lower()
+    if choice == "hermes":
+        return _ready_cache.get("hermes") is True
+    return _ready_cache.get("cursor_sdk") is True
 
 
 def active_provider_id(preferred: str | None = None) -> str | None:

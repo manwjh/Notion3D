@@ -24,7 +24,7 @@ Web 对话走 `POST /api/projects/{id}/turn` → Adapter → Agent → MCP → E
 
 ```bash
 make install
-make dev    # API :8000 + bridge :8787 + Web :5173
+make dev AGENT=cursor_sdk    # API :8000 + bridge :8787 + Web :5173
 # 或：make api && make web
 ```
 
@@ -50,9 +50,8 @@ cd apps/mcp-server && pip install -e .
 
 | 方式 | 文档 |
 |------|------|
-| Cursor SDK local（推荐） | [docs/agents/README.md](../agents/README.md) |
-| OpenClaw | 同上 |
-| Cursor Cloud API | 同上（需 tunnel） |
+| Cursor SDK local（Web 对话） | [docs/agents/README.md](../agents/README.md) |
+| Hermes Agent（Web 对话） | [docs/agents/hermes.md](../agents/hermes.md) |
 | Claude Code 等 | 自行配置 `notion3d-mcp` |
 
 ---

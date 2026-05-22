@@ -2,90 +2,72 @@
 
 架构见 **[docs/architecture.md](../architecture.md)**。Notion3D **没有 LLM**。Web 对话经后端 **Agent 适配接口** 转发到外部 Agent。
 
-## 重要区分
+## 本地开发：必须指定集成环境
 
-| | Cursor IDE | Cursor SDK / Cloud Agents API |
-|---|------------|-------------------------------|
-| 是什么 | 桌面编辑器 | **程序化**调 Agent（SDK 或 HTTP API） |
-| Notion3D 是否集成 | **否** | **是** |
-| 文档 | — | [TypeScript SDK](https://cursor.com/cn/docs/sdk/typescript) · [Cloud API](https://cursor.com/cn/docs/cloud-agent/api/endpoints) |
+```bash
+make dev AGENT=cursor_sdk    # Cursor SDK — bridge + API + Web
+make dev AGENT=hermes        # Hermes Agent — gateway + API + Web
+make dev AGENT=engine        # 仅 API + Web（无 Web 对话）
+make dev-help
+```
+
+`make dev` **必须**带 `AGENT=`。脚本会校验前置条件、注入 `NOTION3D_AGENT_PROVIDER`，并按 profile 启动 sidecar（bridge 或 hermes gateway）。
+
+| Profile | 进程 | Web 对话 |
+|---------|------|----------|
+| `cursor_sdk` | bridge:8787 + API:8000 + Web:5173 | ✅ Cursor SDK |
+| `hermes` | hermes:8642 + API:8000 + Web:5173 | ✅ Hermes Agent |
+| `engine` | API + Web | ❌ 仅 MCP / 外部 Agent 调 Engine |
 
 ---
 
-## 架构
-
-```
-Notion3D Web  ←→  Notion3D API  ←→  Agent Adapter
-                                      ├── cursor_sdk（SDK local，推荐）
-                                      ├── openclaw（本地 CLI）
-                                      └── cursor_cloud（Cloud API + tunnel）
-```
-
-## 适配器
-
-| ID | 类型 | 说明 |
-|----|------|------|
-| `cursor_sdk` | **local** | `@cursor/sdk` 本地运行时 → notion3d MCP → `127.0.0.1:8000`，**无需 tunnel** |
-| `openclaw` | **local** | 本机 `openclaw agent --local` |
-| `cursor_cloud` | **cloud** | `POST https://api.cursor.com/v1/agents`，需 `NOTION3D_PUBLIC_API_BASE` |
-
-`NOTION3D_AGENT_PROVIDER=auto`：**cursor_sdk 优先**（有 Key + bridge 就绪），其次 openclaw，最后 cursor_cloud。
-
-## Cursor SDK local（推荐）
-
-只需 `CURSOR_API_KEY`，**不需要 tunnel**。
+## cursor_sdk（Web 对话）
 
 ```env
 CURSOR_API_KEY=crsr_...
-NOTION3D_AGENT_PROVIDER=auto   # 或 cursor_sdk
 ```
 
 ```bash
-make dev    # 同时启动 API + agent-bridge(:8787) + Web
-# 或分开：
-make api
-make bridge
-make web
+make dev AGENT=cursor_sdk
+# 或: make dev-cursor
 ```
 
-Bridge 位于 `apps/agent-bridge/`，使用 [@cursor/sdk](https://cursor.com/cn/docs/sdk/typescript) `local` 运行时，内联 `notion3d` MCP 指向本机 API。
+`@cursor/sdk` 经 agent-bridge 启动 Agent，挂载 notion3d MCP。
 
-## OpenClaw
+## hermes（Web 对话）
 
-```env
-NOTION3D_AGENT_PROVIDER=openclaw
+Hermes 使用本机 `hermes gateway` HTTP API + `~/.hermes/config.yaml` 中的 notion3d MCP。
+
+完整步骤：**[docs/agents/hermes.md](hermes.md)**
+
+```bash
+make dev AGENT=hermes
+# 或: make dev-hermes
 ```
 
-## Cursor Cloud Agents API
+## engine（无 Web 对话）
 
-仅当 Agent 必须在 Cursor 云端运行时使用；MCP 需公网访问 API。
-
-```env
-NOTION3D_AGENT_PROVIDER=cursor_cloud
-CURSOR_API_KEY=crsr_...
-NOTION3D_PUBLIC_API_BASE=https://你的-tunnel-地址
+```bash
+make dev AGENT=engine
 ```
 
-## Web 对话（用户视角）
+---
 
-Web 使用 **`POST /api/projects/{id}/turn`**，**必须**已连接外部 Agent：
+## Web 对话
 
-| 条件 | 行为 |
-|------|------|
-| Agent 已连接 | 转发到外部 Agent → MCP 建模 |
-| 未连接 | 返回 `blocked`（`reason: no_agent`） |
+`POST /api/projects/{id}/turn` — 必须已连接 Agent（`engine` profile 除外）。
 
-`/health` 的 `web_chat_mode`：`agent` | `setup_required`。
+`/health` → `web_chat_mode`: `agent` | `setup_required`
 
 ---
 
 ## 代码
 
 ```
-apps/agent-bridge/          # @cursor/sdk local HTTP bridge
+scripts/dev.sh
+apps/agent-bridge/          # cursor_sdk
 apps/api/app/services/agents/
   cursor_sdk.py
-  openclaw.py
-  cursor_cloud.py
+  hermes.py
   registry.py
 ```

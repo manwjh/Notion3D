@@ -1,41 +1,43 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from "vue";
 import {
   createProject,
+  getProjectState,
   health,
   listProjects,
   listVersions,
   resumeVersionStl,
+  type DesignTurn,
   type Health,
   type Job,
   type ModelVersion,
   type Project,
 } from "../api/client";
+import AdvancedPanel from "../components/AdvancedPanel.vue";
+import AgentStatusBar from "../components/AgentStatusBar.vue";
 import AssistantSetupPanel from "../components/AssistantSetupPanel.vue";
 import ChatPanel from "../components/ChatPanel.vue";
-import ExportMenu from "../components/ExportMenu.vue";
 import GenerationOverlay from "../components/GenerationOverlay.vue";
-import ModelToolsPanel from "../components/ModelToolsPanel.vue";
 import ModelViewer from "../components/ModelViewer.vue";
 import NewProjectModal from "../components/NewProjectModal.vue";
+import PreviewHeader from "../components/PreviewHeader.vue";
 import ProjectLinkButton from "../components/ProjectLinkButton.vue";
-import ProjectStatusBar from "../components/ProjectStatusBar.vue";
 import SystemStatusButton from "../components/SystemStatusButton.vue";
-import WelcomeScreen from "../components/WelcomeScreen.vue";
 import { useActiveJob } from "../composables/useActiveJob";
 import { useProjectRoute } from "../composables/useProjectRoute";
-import { SAMPLE_PROMPTS } from "../strings/zh";
+import { phaseLabel } from "../types/generation";
 import type { ModelPick } from "../types/pick";
 
 const projects = ref<Project[]>([]);
 const projectId = ref<string | null>(null);
 const versions = ref<ModelVersion[]>([]);
 const selectedVersion = ref<number | null>(null);
+const followLatestVersion = ref(true);
 const sysHealth = ref<Health | null>(null);
 const showNewProject = ref(false);
 const showSetup = ref(false);
+const showAdvanced = ref(false);
 const creatingProject = ref(false);
-const showAdvancedPick = ref(false);
 const pickMode = ref(false);
 const modelPick = ref<ModelPick | null>(null);
 const resumingStl = ref(false);
@@ -43,8 +45,10 @@ const pendingPrompt = ref<string | null>(null);
 const pendingAutoSubmit = ref(false);
 const projectsLoaded = ref(false);
 const unknownProject = ref(false);
-const mobilePanel = ref<"studio" | "chat">("studio");
+const mobilePanel = ref<"studio" | "chat">("chat");
 const narrowLayout = ref(false);
+const chatPanelRef = ref<InstanceType<typeof ChatPanel> | null>(null);
+const activeTurn = ref<DesignTurn | null>(null);
 
 useProjectRoute(projectId);
 
@@ -56,16 +60,46 @@ async function refreshHealth() {
   }
 }
 
-async function refreshAfterJob() {
-  if (!projectId.value) return;
+async function refreshProjectState() {
+  if (!projectId.value) {
+    activeTurn.value = null;
+    return;
+  }
+  try {
+    const state = await getProjectState(projectId.value);
+    activeTurn.value = state.active_turn;
+  } catch {
+    activeTurn.value = null;
+  }
+}
+
+async function refreshVersionsList() {
+  if (!projectId.value) {
+    versions.value = [];
+    selectedVersion.value = null;
+    return;
+  }
   const v = await listVersions(projectId.value);
   versions.value = v;
-  if (v.length > 0) {
-    selectedVersion.value =
-      selectedVersion.value != null && v.some((item) => item.version === selectedVersion.value)
-        ? selectedVersion.value
-        : v[v.length - 1].version;
+  if (v.length === 0) {
+    selectedVersion.value = null;
+    return;
   }
+  if (followLatestVersion.value) {
+    selectedVersion.value = v[v.length - 1].version;
+    return;
+  }
+  if (
+    selectedVersion.value != null &&
+    v.some((item) => item.version === selectedVersion.value)
+  ) {
+    return;
+  }
+  selectedVersion.value = v[v.length - 1].version;
+}
+
+async function refreshAfterJob() {
+  await Promise.all([refreshVersionsList(), refreshProjectState()]);
 }
 
 const { generation, trackJob } = useActiveJob(() => projectId.value, refreshAfterJob);
@@ -89,26 +123,8 @@ async function refreshProjects(preferredId?: string | null) {
   projectsLoaded.value = true;
 }
 
-async function refreshVersions() {
-  if (!projectId.value) {
-    versions.value = [];
-    selectedVersion.value = null;
-    return;
-  }
-  const v = await listVersions(projectId.value);
-  versions.value = v;
-  if (v.length > 0) {
-    selectedVersion.value =
-      selectedVersion.value != null && v.some((item) => item.version === selectedVersion.value)
-        ? selectedVersion.value
-        : v[v.length - 1].version;
-  } else {
-    selectedVersion.value = null;
-  }
-}
-
 onMounted(() => {
-  const mq = window.matchMedia("(max-width: 900px)");
+  const mq = window.matchMedia("(max-width: 1024px)");
   const syncLayout = () => {
     narrowLayout.value = mq.matches;
   };
@@ -128,7 +144,18 @@ onMounted(() => {
   });
 });
 
-watch(projectId, () => refreshVersions().catch(console.error), { immediate: true });
+watch(projectId, () => {
+  followLatestVersion.value = true;
+  refreshVersionsList().catch(console.error);
+  refreshProjectState().catch(console.error);
+}, { immediate: true });
+
+watch(
+  () => generation.value?.busy,
+  (busy) => {
+    if (busy) refreshProjectState().catch(console.error);
+  },
+);
 
 watch([projectsLoaded, () => projects.value.length], () => {
   if (projectsLoaded.value && projects.value.length === 0) showNewProject.value = true;
@@ -145,23 +172,28 @@ async function handleCreateProject(name: string) {
     const p = await createProject(name);
     await refreshProjects(p.id);
     projectId.value = p.id;
+    followLatestVersion.value = true;
     showNewProject.value = false;
+    mobilePanel.value = "chat";
   } finally {
     creatingProject.value = false;
   }
 }
 
-function onTryPrompt(text: string) {
-  pendingPrompt.value = text;
-  pendingAutoSubmit.value = true;
-  if (!projectId.value) {
-    showNewProject.value = true;
-    return;
-  }
+function onTrackJob(job: Job, prompt: string) {
+  followLatestVersion.value = true;
+  return trackJob(job, prompt);
 }
 
-function onTrackJob(job: Job, prompt: string) {
-  trackJob(job, prompt);
+function onTurnComplete() {
+  followLatestVersion.value = true;
+  refreshAfterJob().catch(console.error);
+}
+
+function onSelectVersion(version: number) {
+  followLatestVersion.value = false;
+  selectedVersion.value = version;
+  if (narrowLayout.value) mobilePanel.value = "studio";
 }
 
 const active = computed(() => {
@@ -171,18 +203,27 @@ const active = computed(() => {
   return versions.value[versions.value.length - 1];
 });
 
+const latestVersionNum = computed(() => versions.value.at(-1)?.version ?? null);
+
+const viewingLatest = computed(
+  () =>
+    latestVersionNum.value != null &&
+    selectedVersion.value === latestVersionNum.value,
+);
+
 const jobVersion = computed(() => generation.value?.version ?? null);
 const jobBusy = computed(() => generation.value?.busy ?? false);
 
 const versionIncomplete = computed(
   () =>
-    active.value?.status === "preview_ready" &&
-    active.value.preview_url &&
-    !active.value.stl_url,
+    Boolean(
+      active.value?.status === "preview_ready" &&
+        !active.value.stl_url,
+    ),
 );
 
 const displayStlUrl = computed(() => {
-  if (jobBusy.value) {
+  if (jobBusy.value && followLatestVersion.value) {
     if (generation.value?.stlReady && projectId.value && jobVersion.value != null) {
       return `/api/projects/${projectId.value}/versions/${jobVersion.value}/model.stl?v=${jobVersion.value}`;
     }
@@ -191,25 +232,8 @@ const displayStlUrl = computed(() => {
   return active.value?.stl_url ? `${active.value.stl_url}?v=${active.value.version}` : null;
 });
 
-const displayPreviewUrl = computed(() => {
-  if (jobBusy.value && generation.value?.previewReady && generation.value.previewUrl) {
-    return `${generation.value.previewUrl}?v=${jobVersion.value ?? "preview"}`;
-  }
-  if (versionIncomplete.value && active.value?.preview_url) {
-    return `${active.value.preview_url}?v=${active.value.version}`;
-  }
-  return active.value?.preview_url ?? null;
-});
-
-const previewPending = computed(() =>
-  Boolean(
-    (jobBusy.value && generation.value?.previewReady && !generation.value?.stlReady) ||
-      versionIncomplete.value,
-  ),
-);
-
 const scadUrl = computed(() => {
-  if (jobBusy.value && projectId.value && jobVersion.value != null) {
+  if (jobBusy.value && followLatestVersion.value && projectId.value && jobVersion.value != null) {
     return `/api/projects/${projectId.value}/versions/${jobVersion.value}/model.scad`;
   }
   return active.value?.scad_url ?? null;
@@ -218,14 +242,43 @@ const scadUrl = computed(() => {
 const hasModel = computed(
   () =>
     versions.value.some((v) => v.status === "complete") ||
-    Boolean(displayStlUrl.value || previewPending.value || displayPreviewUrl.value),
+    Boolean(displayStlUrl.value),
+);
+
+const viewerLoading = computed(
+  () => jobBusy.value && followLatestVersion.value && !displayStlUrl.value,
+);
+
+const viewerLoadingLabel = computed(
+  () =>
+    phaseLabel(generation.value?.phase ?? "rendering", generation.value?.detail) ??
+    "正在生成 3D 模型…",
+);
+
+const showBlockingOverlay = computed(
+  () => viewerLoading.value && !hasModel.value,
+);
+
+const canPick = computed(() => Boolean(displayStlUrl.value));
+
+watch(hasModel, (val, old) => {
+  if (val && !old && narrowLayout.value) mobilePanel.value = "studio";
+});
+
+watch(
+  () => generation.value?.stlReady,
+  (ready, wasReady) => {
+    if (ready && !wasReady && followLatestVersion.value && narrowLayout.value) {
+      mobilePanel.value = "studio";
+    }
+  },
 );
 
 const hasExportable = computed(() => Boolean(active.value?.stl_url));
 
-const latestVersionNum = computed(() => active.value?.version ?? versions.value.at(-1)?.version ?? null);
-
 const currentProject = computed(() => projects.value.find((p) => p.id === projectId.value));
+
+const agentReady = computed(() => sysHealth.value?.web_chat_mode === "agent");
 
 const selectedProjectId = computed({
   get: () => projectId.value ?? "",
@@ -248,17 +301,17 @@ async function handleResumeStl() {
   }
 }
 
-function toggleAdvanced() {
-  showAdvancedPick.value = !showAdvancedPick.value;
-  if (!showAdvancedPick.value) {
-    pickMode.value = false;
-    modelPick.value = null;
-  }
+function togglePickMode() {
+  if (!canPick.value) return;
+  pickMode.value = !pickMode.value;
+  if (!pickMode.value) modelPick.value = null;
 }
 
 function onModelPick(p: ModelPick) {
   modelPick.value = p;
   pickMode.value = false;
+  mobilePanel.value = "chat";
+  void nextTick(() => chatPanelRef.value?.focusInput());
 }
 </script>
 
@@ -269,14 +322,9 @@ function onModelPick(p: ModelPick) {
         <div class="brand-mark" aria-hidden="true"><span /><span /><span /></div>
         <div class="brand-text">
           <strong class="brand-title">Notion3D</strong>
-          <span class="brand-subtitle">3D 设计工作台</span>
+          <span class="brand-subtitle">对话建模</span>
         </div>
-        <ProjectStatusBar
-          :has-model="hasModel"
-          :has-exportable="hasExportable"
-          :busy="jobBusy"
-          :version="latestVersionNum"
-        />
+        <AgentStatusBar :agent-ready="agentReady" />
       </div>
       <div class="topbar-actions">
         <div class="project-picker">
@@ -290,8 +338,11 @@ function onModelPick(p: ModelPick) {
         <button type="button" class="btn-ghost btn-ghost--compact" @click="showSetup = true">
           助手
         </button>
-        <ProjectLinkButton :project-id="projectId" :web-url="currentProject?.web_url" />
-        <ExportMenu v-if="hasExportable" :version="active" prominent />
+        <ProjectLinkButton
+          :project-id="projectId"
+          :web-url="currentProject?.web_url"
+          :compact="narrowLayout"
+        />
         <SystemStatusButton :health="sysHealth" />
       </div>
     </header>
@@ -300,35 +351,64 @@ function onModelPick(p: ModelPick) {
       <button
         type="button"
         class="mobile-panel-tab"
-        :class="{ active: mobilePanel === 'studio' }"
-        @click="mobilePanel = 'studio'"
+        :class="{ active: mobilePanel === 'chat' }"
+        @click="mobilePanel = 'chat'"
       >
-        3D 预览
+        设计助手
       </button>
       <button
         type="button"
         class="mobile-panel-tab"
-        :class="{ active: mobilePanel === 'chat' }"
-        @click="mobilePanel = 'chat'"
+        :class="{ active: mobilePanel === 'studio' }"
+        @click="mobilePanel = 'studio'"
       >
-        设计对话
+        图纸预览
       </button>
     </nav>
 
     <main
-      class="workspace workspace--studio"
+      class="workspace workspace--agent-first"
       :class="{
         'workspace--narrow': narrowLayout,
         'workspace--show-studio': !narrowLayout || mobilePanel === 'studio',
         'workspace--show-chat': !narrowLayout || mobilePanel === 'chat',
       }"
     >
-      <section class="studio-pane">
-        <WelcomeScreen
-          v-if="!projectId"
-          @create-project="showNewProject = true"
-          @try-prompt="onTryPrompt"
+      <aside class="chat-pane" :class="{ 'chat-pane--linked': modelPick }">
+        <ChatPanel
+          ref="chatPanelRef"
+          :project-id="projectId"
+          :has-model="hasModel"
+          :initial-prompt="pendingPrompt"
+          :auto-submit-initial="pendingAutoSubmit"
+          :pick="modelPick"
+          :generation="generation"
+          :active-turn="activeTurn"
+          :health="sysHealth"
+          :narrow="narrowLayout"
+          :versions="versions"
+          :selected-version="selectedVersion"
+          @consume-initial-prompt="
+            pendingPrompt = null;
+            pendingAutoSubmit = false;
+          "
+          @request-project="showNewProject = true"
+          @clear-pick="modelPick = null"
+          @turn-complete="onTurnComplete"
+          @track-job="onTrackJob"
+          @open-setup="showSetup = true"
+          @select-version="onSelectVersion"
         />
+      </aside>
+
+      <section class="studio-pane viewport-pane">
+        <template v-if="!projectId">
+          <div class="viewer-root viewer-empty">
+            <div class="viewer-empty-icon" aria-hidden="true"><span /><span /><span /></div>
+            <p>图纸预览</p>
+            <span>新建项目并在对话区描述需求，方案会显示在这里</span>
+          </div>
+        </template>
 
         <template v-else>
           <div v-if="unknownProject" class="unknown-project-banner" role="alert">
@@ -337,121 +417,51 @@ function onModelPick(p: ModelPick) {
               刷新
             </button>
           </div>
-          <div class="version-bar">
-            <div class="version-bar-row">
-              <div class="version-list">
-                <span class="version-label">{{ currentProject?.name ?? "项目" }}</span>
-                <em v-if="versions.length === 0 && !jobBusy" class="version-empty">
-                  在右侧描述需求，模型会出现在这里
-                </em>
-                <button
-                  v-for="v in versions"
-                  :key="v.version"
-                  type="button"
-                  class="version-btn"
-                  :class="{
-                    active: selectedVersion === v.version,
-                    'version-btn--partial': v.status !== 'complete',
-                  }"
-                  :title="v.prompt ?? undefined"
-                  @click="selectedVersion = v.version"
-                >
-                  v{{ v.version }}
-                  <span
-                    v-if="v.status === 'preview_ready'"
-                    class="version-dot"
-                    aria-label="2D 初稿"
-                  />
-                </button>
-              </div>
-              <div class="version-actions">
-                <button
-                  v-if="versionIncomplete && !jobBusy"
-                  type="button"
-                  class="btn-primary action-btn--compact"
-                  :disabled="resumingStl"
-                  @click="handleResumeStl"
-                >
-                  {{ resumingStl ? "生成中…" : "生成 3D 模型" }}
-                </button>
-                <button
-                  type="button"
-                  class="action-btn action-btn--ghost"
-                  :class="{ active: showAdvancedPick }"
-                  :aria-pressed="showAdvancedPick"
-                  @click="toggleAdvanced"
-                >
-                  精确修改
-                </button>
-                <button
-                  v-if="showAdvancedPick"
-                  type="button"
-                  class="action-btn action-btn--pick"
-                  :class="{ active: pickMode }"
-                  :disabled="!hasModel"
-                  :aria-pressed="pickMode"
-                  @click="pickMode = !pickMode"
-                >
-                  {{ pickMode ? "点选中…" : "3D 点选" }}
-                </button>
-              </div>
-            </div>
-            <p v-if="active?.prompt" class="version-prompt" :title="active.prompt">
-              {{ active.prompt }}
-            </p>
-          </div>
 
-          <div class="studio-stack studio-stack--with-tools">
-            <div class="viewer-wrap">
-              <ModelViewer
-                :stl-url="displayStlUrl"
-                :preview-url="displayPreviewUrl"
-                :preview-pending="previewPending"
-                :pick-mode="pickMode"
-                :pick="modelPick"
-                @pick="onModelPick"
-              />
-              <GenerationOverlay
-                v-if="generation?.busy && !generation.previewReady"
-                :state="generation"
-                :has-model="hasModel"
-              />
-            </div>
-            <ModelToolsPanel
-              v-if="scadUrl || jobBusy"
-              :project-id="projectId"
-              :scad-url="scadUrl"
-              :version="jobBusy && jobVersion != null ? jobVersion : selectedVersion"
-              :generating="jobBusy"
-              :generation-phase="generation?.phase"
-              :track-job="trackJob"
+          <PreviewHeader
+            :active-version="active"
+            :version-incomplete="versionIncomplete"
+            :job-busy="jobBusy"
+            :resuming-stl="resumingStl"
+            :pick-mode="pickMode"
+            :can-pick="canPick"
+            :viewing-latest="viewingLatest"
+            :has-export="hasExportable"
+            @resume-stl="handleResumeStl"
+            @toggle-pick="togglePickMode"
+            @open-advanced="showAdvanced = true"
+          />
+
+          <div class="viewer-wrap viewer-wrap--full">
+            <ModelViewer
+              :stl-url="displayStlUrl"
+              :loading="viewerLoading"
+              :loading-label="viewerLoadingLabel"
+              :legacy-incomplete="versionIncomplete && !jobBusy"
+              :pick-mode="pickMode"
+              :pick="modelPick"
+              @pick="onModelPick"
+            />
+            <GenerationOverlay
+              v-if="showBlockingOverlay && generation"
+              :state="generation"
+              :has-model="false"
             />
           </div>
         </template>
       </section>
-
-      <aside class="chat-pane" :class="{ 'chat-pane--linked': modelPick }">
-        <ChatPanel
-          :project-id="projectId"
-          :sample-prompts="SAMPLE_PROMPTS"
-          :has-model="hasModel"
-          :initial-prompt="pendingPrompt"
-          :auto-submit-initial="pendingAutoSubmit"
-          :pick="modelPick"
-          :generation="generation"
-          :health="sysHealth"
-          @consume-initial-prompt="
-            pendingPrompt = null;
-            pendingAutoSubmit = false;
-          "
-          @request-project="showNewProject = true"
-          @clear-pick="modelPick = null"
-          @turn-complete="refreshAfterJob"
-          @track-job="onTrackJob"
-          @open-setup="showSetup = true"
-        />
-      </aside>
     </main>
+
+    <AdvancedPanel
+      :open="showAdvanced"
+      :project-id="projectId"
+      :scad-url="scadUrl"
+      :version="jobBusy && followLatestVersion && jobVersion != null ? jobVersion : selectedVersion"
+      :generating="jobBusy && followLatestVersion"
+      :generation-phase="generation?.phase"
+      :track-job="onTrackJob"
+      @close="showAdvanced = false"
+    />
 
     <NewProjectModal
       :open="showNewProject"

@@ -23,34 +23,47 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"
 
     data_dir: Path = _REPO_ROOT / "data"
+    templates_dir: Path = _REPO_ROOT / "templates"
     openscad_bin: str = "openscad"
     web_base_url: str = Field(
         default="http://localhost:5173",
         validation_alias=AliasChoices("NOTION3D_WEB_BASE", "NOTION3D_WEB_BASE_URL"),
     )
 
-    # Web 对话 Agent：auto | cursor_sdk | openclaw | cursor_cloud
-    agent_provider: str = "auto"
+    # Web 对话 Agent：cursor_sdk | hermes | engine（engine = 禁用 Web 对话）
+    agent_provider: str = "cursor_sdk"
     notion3d_mcp_command: str = "notion3d-mcp"
-    openclaw_bin: str = "openclaw"
 
-    # Cursor SDK local bridge（@cursor/sdk，非 IDE，无需 tunnel）
+    # Cursor SDK local bridge（@cursor/sdk，非 Cursor IDE）
     cursor_sdk_bridge_base: str = "http://127.0.0.1:8787"
     repo_root: Path = _REPO_ROOT
 
-    # Cursor Cloud Agents API（非 Cursor IDE，需公网 tunnel）
     cursor_api_key: str = Field(
         default="",
         validation_alias=AliasChoices("CURSOR_API_KEY", "NOTION3D_CURSOR_API_KEY"),
     )
-    cursor_api_base: str = "https://api.cursor.com"
-    cursor_model: str = "composer-2"
-    public_api_base: str = ""  # Cloud Agent MCP 需能访问的 Notion3D API 地址
+
+    # Hermes Agent gateway API server（hermes gateway，默认 :8642）
+    hermes_bin: str = "hermes"
+    hermes_api_base: str = "http://127.0.0.1:8642"
+    hermes_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "HERMES_API_SERVER_KEY",
+            "NOTION3D_HERMES_API_KEY",
+            "API_SERVER_KEY",
+        ),
+    )
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
+    @property
+    def user_templates_dir(self) -> Path:
+        return self.data_dir / "templates" / "user"
+
 
 settings = Settings()
 settings.data_dir.mkdir(parents=True, exist_ok=True)
+settings.user_templates_dir.mkdir(parents=True, exist_ok=True)

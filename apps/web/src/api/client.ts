@@ -12,6 +12,7 @@ export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
   created_at: string;
+  turn_id?: string | null;
   job_id?: string | null;
 };
 
@@ -19,6 +20,8 @@ export type Job = {
   id: string;
   project_id: string;
   kind?: string | null;
+  source?: "agent" | "manual" | "template" | "system" | null;
+  turn_id?: string | null;
   status: "pending" | "running" | "succeeded" | "failed";
   phase?: string | null;
   prompt?: string | null;
@@ -43,6 +46,8 @@ export type ModelVersion = {
   preview_url: string | null;
   created_at: string;
   prompt: string | null;
+  turn_id?: string | null;
+  job_id?: string | null;
 };
 
 export type AgentProvider = {
@@ -77,14 +82,26 @@ export type AgentRun = {
 };
 
 export type Turn = {
+  turn_id?: string | null;
   routing: "agent" | "blocked";
   reason?: string | null;
   agent?: AgentRun | null;
   assistant_message_id?: string | null;
 };
 
+export type DesignTurn = {
+  id: string;
+  agent_phase: "running" | "replied" | "failed";
+  render_phase: "idle" | "running" | "done" | "failed";
+  user_message_id: string;
+  assistant_message_id?: string | null;
+  job_id?: string | null;
+  version?: number | null;
+};
+
 export type AgentStatus = {
   active: boolean;
+  turn_id?: string | null;
   provider?: string | null;
   session_id?: string | null;
   run_id?: string | null;
@@ -102,6 +119,7 @@ export type ProjectCapabilities = {
 export type ProjectState = {
   project: Project;
   messages: ChatMessage[];
+  active_turn: DesignTurn | null;
   active_job: Job | null;
   agent: AgentStatus;
   capabilities: ProjectCapabilities;
@@ -136,10 +154,15 @@ export const createProject = (name: string) =>
     body: JSON.stringify({ name }),
   });
 
-export const renderScad = (projectId: string, scadCode: string, label?: string) =>
+export const renderScad = (
+  projectId: string,
+  scadCode: string,
+  label?: string,
+  source: "manual" | "agent" = "manual",
+) =>
   request<Job>(`/api/projects/${projectId}/render-scad`, {
     method: "POST",
-    body: JSON.stringify({ scad_code: scadCode, label: label ?? "参数调整" }),
+    body: JSON.stringify({ scad_code: scadCode, label: label ?? "手动编辑", source }),
   });
 
 export const getProjectState = (projectId: string) =>

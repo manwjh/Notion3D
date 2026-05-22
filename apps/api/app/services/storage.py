@@ -110,7 +110,14 @@ def version_dir(project_id: str, version: int) -> Path:
     return path
 
 
-def append_message(project_id: str, role: MessageRole, content: str, job_id: str | None = None) -> dict:
+def append_message(
+    project_id: str,
+    role: MessageRole,
+    content: str,
+    *,
+    turn_id: str | None = None,
+    job_id: str | None = None,
+) -> dict:
     messages_file = _messages_path(project_id)
     messages = json.loads(messages_file.read_text()) if messages_file.exists() else []
     msg = {
@@ -118,6 +125,7 @@ def append_message(project_id: str, role: MessageRole, content: str, job_id: str
         "role": role.value,
         "content": content,
         "created_at": _utcnow().isoformat(),
+        "turn_id": turn_id,
         "job_id": job_id,
     }
     messages.append(msg)

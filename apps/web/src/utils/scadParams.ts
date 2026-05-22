@@ -51,7 +51,9 @@ export function friendlyParamLabel(name: string): string {
     wall: "壁厚",
     t: "壁厚",
     thickness: "壁厚",
-    fn: "精度 $fn",
+    teeth: "齿数",
+    module_mm: "模数",
+    module: "模数",
   };
   return map[name] ?? name;
 }

@@ -4,14 +4,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import health, project_agent, projects
+from app.routers import health, project_agent, projects, templates
 from app.services import job_service
+from app.services.agents import refresh_provider_cache
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     settings.data_dir.mkdir(parents=True, exist_ok=True)
     job_service.load_jobs_from_disk()
+    await refresh_provider_cache()
     await job_service.resume_interrupted_jobs()
     yield
 
@@ -34,3 +36,4 @@ app.add_middleware(
 app.include_router(health.router)
 app.include_router(projects.router)
 app.include_router(project_agent.router)
+app.include_router(templates.router)

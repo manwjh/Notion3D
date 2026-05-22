@@ -1,0 +1,15 @@
+{
+  "id": "sd-card-box",
+  "title": "SD 卡收纳盒",
+  "description": "单卡浅槽，前侧指槽便于取出，标准 SD 尺寸留隙",
+  "tags": ["SD卡", "收纳", "存储"],
+  "category": "utility",
+  "license": "MIT",
+  "source": "notion3d-builtin",
+  "params": [
+    { "name": "card_w", "label": "卡宽（含隙）", "default": 32.4, "unit": "mm" },
+    { "name": "card_l", "label": "卡长（含隙）", "default": 24.4, "unit": "mm" },
+    { "name": "card_t", "label": "卡厚（含隙）", "default": 2.3, "unit": "mm" },
+    { "name": "wall", "label": "壁厚", "default": 1.6, "unit": "mm" }
+  ]
+}

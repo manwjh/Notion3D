@@ -12,11 +12,13 @@ mcp = FastMCP(
     "notion3d",
     instructions=(
         "Notion3D OpenSCAD engine (no LLM). YOU (the Agent) generate OpenSCAD — "
-        "prefer notion3d_render_scad to submit SCAD for rendering. "
-        "notion3d_template runs server-side rule templates only (cube/sphere/box), no LLM. "
-        "Jobs are async: returns job_id — poll with notion3d_get_job or notion3d_wait_job. "
-        "After success, share web_url with the user so they can preview/export in the browser. "
-        "Follow the notion3d-openscad Skill for SCAD quality rules."
+        "always use notion3d_render_scad for modeling (submits SCAD, binds to active design turn). "
+        "Do NOT use notion3d_template except for trivial test primitives in dev. "
+        "Jobs are async: poll with notion3d_get_job or notion3d_wait_job. "
+        "User is already in the Web workbench — do not ask them to open web_url. "
+        "Follow notion3d-openscad Skill: parametric mm SCAD, validate before submit. "
+        "For common shapes, check notion3d_list_templates before writing SCAD from scratch. "
+        "Engine rejects non-manifold meshes."
     ),
 )
 
@@ -72,10 +74,7 @@ def notion3d_template(
     pick_z: float | None = None,
     pick_label: str | None = None,
 ) -> str:
-    """Simple NL → rule-based OpenSCAD template (no LLM). Returns a render job.
-
-    For complex models, generate OpenSCAD yourself and use notion3d_render_scad instead.
-    """
+    """Legacy rule-based NL→SCAD (no LLM). Dev/test only — prefer notion3d_render_scad."""
     pick = None
     if pick_x is not None and pick_y is not None and pick_z is not None:
         pick = {
@@ -121,12 +120,88 @@ def notion3d_list_versions(project_id: str) -> str:
 
 
 @mcp.tool()
+def notion3d_list_templates(
+    tag: str | None = None,
+    category: str | None = None,
+    scope: str = "all",
+) -> str:
+    """Browse SCAD template library (builtin + user-saved). Filter by tag or category."""
+    return _out(client.list_templates(tag=tag, category=category, scope=scope))
+
+
+@mcp.tool()
+def notion3d_get_template(template_id: str) -> str:
+    """Get template metadata and full SCAD source by id."""
+    return _out(client.get_template(template_id))
+
+
+@mcp.tool()
+def notion3d_apply_template(
+    template_id: str,
+    project_id: str | None = None,
+    name: str | None = None,
+    label: str | None = None,
+    params_json: str | None = None,
+) -> str:
+    """Apply a library template to a project (creates project if project_id omitted).
+
+    params_json: optional JSON object of param overrides, e.g. {"size": 40, "module_mm": 2}.
+    For heavy edits: notion3d_get_template → modify SCAD → notion3d_render_scad.
+    """
+    import json
+
+    params = json.loads(params_json) if params_json else None
+    result = client.apply_template(
+        template_id,
+        project_id=project_id,
+        name=name,
+        label=label,
+        params=params,
+    )
+    return _out(
+        {
+            **result,
+            "hint": "Poll notion3d_get_job or use notion3d_wait_job until status is succeeded/failed.",
+        }
+    )
+
+
+@mcp.tool()
+def notion3d_save_template(
+    project_id: str,
+    version: int,
+    template_id: str,
+    title: str,
+    description: str | None = None,
+    tags: str | None = None,
+    category: str | None = None,
+) -> str:
+    """Save a project version as a user template for reuse (comma-separated tags)."""
+    tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
+    return _out(
+        client.save_template(
+            project_id,
+            version,
+            template_id=template_id,
+            title=title,
+            description=description,
+            tags=tag_list,
+            category=category,
+        )
+    )
+
+
+@mcp.tool()
 def notion3d_render_scad(
     project_id: str,
     scad_code: str,
     label: str = "MCP 渲染 SCAD",
 ) -> str:
-    """Submit Agent-generated OpenSCAD source for rendering. Preferred path for complex models."""
+    """Submit Agent-generated OpenSCAD for STL rendering.
+
+    Preferred for complex models. Engine rejects SCAD that produces non-closed meshes.
+    See notion3d-openscad skill for domain examples and validation.
+    """
     return _out(client.render_scad(project_id, scad_code, label=label))
 
 

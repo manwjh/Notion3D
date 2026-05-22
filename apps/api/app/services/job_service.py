@@ -2,8 +2,8 @@ import json
 import uuid
 from datetime import datetime, timezone
 
-from app.models.schemas import JobStatus, MessageRole
-from app.services import cad_service, job_store, storage
+from app.models.schemas import JobSource, JobStatus, MessageRole
+from app.services import cad_service, design_turn, job_store, storage
 from app.services.pick_context import format_edit_prompt
 
 _jobs: dict[str, dict] = {}
@@ -29,6 +29,8 @@ def _new_job(**fields) -> dict:
         "preview_ready": False,
         "stl_ready": False,
         "scad_code": None,
+        "turn_id": None,
+        "source": JobSource.agent.value,
         "created_at": now,
         "updated_at": now,
         **fields,
@@ -49,17 +51,27 @@ def create_template_job(
         pick=pick,
         region=region,
         kind="template",
+        source=JobSource.template.value,
         status=JobStatus.pending.value,
     )
 
 
-def create_render_job(project_id: str, scad_code: str, label: str = "手动编辑 SCAD") -> dict:
+def create_render_job(
+    project_id: str,
+    scad_code: str,
+    label: str = "手动编辑 SCAD",
+    *,
+    turn_id: str | None = None,
+    source: str = JobSource.manual.value,
+) -> dict:
     return _new_job(
         id=str(uuid.uuid4()),
         project_id=project_id,
         prompt=label,
         kind="render",
         scad_code=scad_code,
+        turn_id=turn_id,
+        source=source,
         status=JobStatus.pending.value,
     )
 
@@ -135,7 +147,14 @@ async def _ensure_version_files(
     (out_dir / "model.scad").write_text(scad_code, encoding="utf-8")
 
     meta = _read_version_meta(project_id, version)
-    meta.update({"prompt": prompt, "version": version, "status": meta.get("status", "pending")})
+    job = get_job(job_id)
+    meta.update({
+        "prompt": prompt,
+        "version": version,
+        "status": meta.get("status", "pending"),
+        "turn_id": job.get("turn_id") if job else None,
+        "job_id": job_id,
+    })
     _write_version_meta(project_id, version, meta)
     return version
 
@@ -189,13 +208,13 @@ async def _render_stl_stage(
     stl_path = out_dir / "model.stl"
 
     if stl_path.exists():
-        update_job(job_id, message="3D 网格已完成，正在加载…", stl_ready=True, checkpoint="stl_done")
+        update_job(job_id, message="3D 模型已就绪", stl_ready=True, checkpoint="stl_done")
         _set_version_status(project_id, version, "complete")
         return True
 
-    update_job(job_id, message="正在计算 3D 网格…", version=version)
+    update_job(job_id, message="正在生成 3D 模型…", version=version)
     await cad_service.render_stl(scad_code, stl_path)
-    update_job(job_id, message="3D 网格已完成，正在加载…", stl_ready=True, checkpoint="stl_done")
+    update_job(job_id, message="3D 模型已就绪", stl_ready=True, checkpoint="stl_done")
     _set_version_status(project_id, version, "complete")
     return stl_path.exists()
 
@@ -207,21 +226,24 @@ async def _save_version(
     scad_code: str,
 ) -> int:
     version = await _ensure_version_files(project_id, job_id, prompt, scad_code)
-    await _render_preview_stage(project_id, job_id, version, scad_code)
     await _render_stl_stage(project_id, job_id, version, scad_code)
     return version
 
 
-def _append_success_message(project_id: str, job_id: str, content: str) -> None:
+def _append_render_failure(project_id: str, job_id: str, content: str, turn_id: str | None) -> None:
     if job_store.message_exists_for_job(project_id, job_id):
         return
-    storage.append_message(project_id, role=MessageRole.assistant, content=content, job_id=job_id)
+    storage.append_message(
+        project_id,
+        role=MessageRole.system,
+        content=content,
+        turn_id=turn_id,
+        job_id=job_id,
+    )
 
 
-def _append_failure_message(project_id: str, job_id: str, content: str) -> None:
-    if job_store.message_exists_for_job(project_id, job_id):
-        return
-    storage.append_message(project_id, role=MessageRole.assistant, content=content, job_id=job_id)
+def _finalize_job(project_id: str, job_id: str, job: dict) -> None:
+    design_turn.sync_render_from_job(project_id, job)
 
 
 def _latest_complete_scad(project_id: str) -> str | None:
@@ -235,10 +257,6 @@ def _latest_complete_scad(project_id: str) -> str | None:
         if stl.exists() and scad.exists():
             return scad.read_text(encoding="utf-8")
     return None
-
-
-def _template_success_message(_prompt: str, version: int) -> str:
-    return f"初稿 v{version} 好了，左侧可以预览和旋转。继续描述即可迭代。"
 
 
 async def run_template_job(job_id: str) -> None:
@@ -289,14 +307,20 @@ async def run_template_job(job_id: str) -> None:
             version=version,
             checkpoint="complete",
         )
-        _append_success_message(
-            project_id,
-            job_id,
-            _template_success_message(prompt, version),
-        )
+        job = get_job(job_id)
+        if job:
+            _finalize_job(project_id, job_id, job)
     except Exception as exc:
         update_job(job_id, status=JobStatus.failed.value, message=str(exc))
-        _append_failure_message(project_id, job_id, f"这版方案没做出来：{exc}")
+        job = get_job(job_id)
+        _append_render_failure(
+            project_id,
+            job_id,
+            f"渲染未成功：{exc}",
+            job.get("turn_id") if job else None,
+        )
+        if job:
+            _finalize_job(project_id, job_id, job)
 
 
 async def run_render_scad_job(job_id: str) -> None:
@@ -334,14 +358,20 @@ async def run_render_scad_job(job_id: str) -> None:
             version=version,
             checkpoint="complete",
         )
-        _append_success_message(
-            project_id,
-            job_id,
-            f"已从 SCAD 渲染版本 v{version}。可在左侧预览并继续编辑。",
-        )
+        job = get_job(job_id)
+        if job:
+            _finalize_job(project_id, job_id, job)
     except Exception as exc:
         update_job(job_id, status=JobStatus.failed.value, message=str(exc))
-        _append_failure_message(project_id, job_id, f"渲染失败：{exc}")
+        job = get_job(job_id)
+        _append_render_failure(
+            project_id,
+            job_id,
+            f"渲染未成功：{exc}",
+            job.get("turn_id") if job else None,
+        )
+        if job:
+            _finalize_job(project_id, job_id, job)
 
 
 async def resume_version_stl(project_id: str, version: int) -> dict:

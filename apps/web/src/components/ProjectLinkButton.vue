@@ -5,6 +5,7 @@ import { projectWebUrl } from "../composables/useProjectRoute";
 const props = defineProps<{
   projectId: string | null;
   webUrl?: string | null;
+  compact?: boolean;
 }>();
 
 const copied = ref(false);
@@ -30,6 +31,6 @@ async function copyLink() {
     :title="webUrl ?? projectWebUrl(projectId)"
     @click="copyLink"
   >
-    {{ copied ? "已复制链接" : "复制工作台链接" }}
+    {{ copied ? (compact ? "已复制" : "已复制链接") : compact ? "复制链接" : "复制工作台链接" }}
   </button>
 </template>

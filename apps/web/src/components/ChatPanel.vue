@@ -1,42 +1,51 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
-import type { ChatMessage, Health, Job, ModelPick } from "../api/client";
+import type {
+  ChatMessage,
+  DesignTurn,
+  Health,
+  Job,
+  ModelPick,
+  ModelVersion,
+  ProjectCapabilities,
+} from "../api/client";
 import { getJob, getProjectState, sendTurn } from "../api/client";
 import { mergeSessionPhase, sleep } from "../composables/useDesignTurn";
-import { EDIT_HINTS, EDIT_REGIONS } from "../config/editHints";
 import {
   MODE_HINT,
   MODE_LABEL,
-  SAMPLE_PROMPTS as DEFAULT_SAMPLES,
   assistantDisplayName,
   type WebChatMode,
 } from "../strings/zh";
-import {
-  SESSION_STEPS,
-  phaseLabel,
-  stepIndex,
-  type GenerationState,
-  type JobPhase,
-} from "../types/generation";
+import { phaseLabel, type GenerationState, type JobPhase } from "../types/generation";
 import { formatPickShort } from "../types/pick";
+import ChatMessageBody from "./ChatMessageBody.vue";
 
 const props = withDefaults(
   defineProps<{
     projectId: string | null;
-    samplePrompts?: string[];
     hasModel?: boolean;
     initialPrompt?: string | null;
     autoSubmitInitial?: boolean;
     pick?: ModelPick | null;
     generation: GenerationState | null;
+    activeTurn?: DesignTurn | null;
     health?: Health | null;
+    narrow?: boolean;
+    versions?: ModelVersion[];
+    selectedVersion?: number | null;
+    agentBusyExternal?: boolean;
   }>(),
   {
-    samplePrompts: () => DEFAULT_SAMPLES,
     hasModel: false,
     initialPrompt: null,
     autoSubmitInitial: false,
     pick: null,
+    activeTurn: null,
+    narrow: false,
+    versions: () => [],
+    selectedVersion: null,
+    agentBusyExternal: false,
   },
 );
 
@@ -47,71 +56,133 @@ const emit = defineEmits<{
   turnComplete: [];
   trackJob: [job: Job, prompt: string];
   openSetup: [];
+  selectVersion: [version: number];
+  agentBusyChange: [busy: boolean];
 }>();
-
-const VISIBLE_HINTS = 3;
 
 const messages = ref<ChatMessage[]>([]);
 const input = ref("");
-const selectedRegion = ref<string | null>(null);
-const showAllHints = ref(false);
 const sending = ref(false);
 const agentBusy = ref(false);
 const agentExternalUrl = ref<string | null>(null);
 const submitError = ref<string | null>(null);
+const capabilities = ref<ProjectCapabilities | null>(null);
 const bottomRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 
-const chatMode = computed<WebChatMode>(() => props.health?.web_chat_mode ?? "setup_required");
-const modeLabel = computed(() => MODE_LABEL[chatMode.value]);
-const modeHint = computed(() => MODE_HINT[chatMode.value]);
+const chatMode = computed<WebChatMode | null>(() => {
+  const fromState = capabilities.value?.web_chat_mode;
+  if (fromState) return fromState;
+  if (props.health?.web_chat_mode) return props.health.web_chat_mode;
+  return null;
+});
+
+const assistantChecking = computed(() => chatMode.value === null);
+const modeLabel = computed(() =>
+  assistantChecking.value ? "检测中" : MODE_LABEL[chatMode.value ?? "setup_required"],
+);
+const modeHint = computed(() =>
+  assistantChecking.value
+    ? "正在检测设计助手连接…"
+    : MODE_HINT[chatMode.value ?? "setup_required"],
+);
 
 const assistantName = computed(() =>
   assistantDisplayName(props.health?.agent_active, props.health?.assistant_label),
 );
 
 const session = computed(() =>
-  mergeSessionPhase(props.generation, agentBusy.value),
+  mergeSessionPhase(
+    props.generation,
+    agentBusy.value || props.agentBusyExternal,
+    props.activeTurn,
+  ),
 );
 
 const phase = computed<JobPhase>(() =>
   submitError.value ? "failed" : sending.value ? "submitting" : session.value.phase,
 );
 
-const busy = computed(() => sending.value || session.value.busy);
-const canSend = computed(() => chatMode.value === "agent" && !busy.value);
-
-const statusDetail = computed(() => session.value.detail ?? submitError.value);
-
-const showProgress = computed(
-  () => busy.value && phase.value !== "done" && phase.value !== "failed",
+const anyBusy = computed(() => sending.value || session.value.busy);
+const canSend = computed(
+  () => chatMode.value === "agent" && !sending.value && !anyBusy.value,
 );
 
-const currentStep = computed(() => stepIndex(phase.value));
+watch(
+  () => chatMode.value,
+  (mode) => {
+    if (mode === "agent") submitError.value = null;
+  },
+);
+
+const statusDetail = computed(() => session.value.detail ?? submitError.value);
+const activityLabel = computed(() => {
+  if (sending.value) return "已发送…";
+  if (session.value.lane === "render") {
+    return phaseLabel(phase.value, statusDetail.value ?? undefined) ?? "正在生成 3D 模型…";
+  }
+  if (session.value.lane === "agent") return "助手处理中…";
+  return null;
+});
+
+const versionByJobId = computed(() => {
+  const map = new Map<string, number>();
+  for (const v of props.versions) {
+    if (v.job_id) map.set(v.job_id, v.version);
+  }
+  return map;
+});
+
+const versionByTurnId = computed(() => {
+  const map = new Map<string, number>();
+  for (const v of props.versions) {
+    if (v.turn_id) map.set(v.turn_id, v.version);
+  }
+  if (props.activeTurn?.version != null) {
+    map.set(props.activeTurn.id, props.activeTurn.version);
+  }
+  return map;
+});
+
+function versionForMessage(m: ChatMessage): ModelVersion | null {
+  if (!props.versions.length) return null;
+  let vNum: number | undefined;
+  if (m.job_id) vNum = versionByJobId.value.get(m.job_id);
+  if (vNum == null && m.turn_id) vNum = versionByTurnId.value.get(m.turn_id);
+  if (vNum == null) return null;
+  return props.versions.find((v) => v.version === vNum) ?? null;
+}
+
+function roleLabel(m: ChatMessage): string {
+  if (m.role === "user") return "你";
+  if (m.role === "system") return "系统";
+  return assistantName.value;
+}
 
 const inputPlaceholder = computed(() => {
   if (!props.projectId) return "先新建项目，然后描述想要的 3D 物件…";
   if (chatMode.value === "setup_required") return "请先连接设计助手（右上角「助手」）…";
+  if (assistantChecking.value) return "正在检测助手连接…";
+  if (anyBusy.value && !sending.value) return "助手处理中，可先写好下一条…";
   if (props.pick) return "说说想怎么改这里…";
-  if (selectedRegion.value) return `说说想怎么改「${selectedRegion.value}」…`;
-  if (props.hasModel) return "继续描述想改什么，或选下方快捷语…";
-  return `跟 ${assistantName.value} 说说用途、尺寸、结构…`;
+  if (props.hasModel) return "继续描述想改什么…";
+  return "描述你想做的物件…";
 });
 
-const hints = computed(() =>
-  showAllHints.value ? EDIT_HINTS : EDIT_HINTS.slice(0, VISIBLE_HINTS),
-);
+watch(agentBusy, (v) => emit("agentBusyChange", v), { immediate: true });
 
 function messageTone(content: string, role: ChatMessage["role"]) {
+  if (role === "system") return "system";
   if (role !== "assistant") return "default";
   if (content.includes("失败") || content.includes("不可用")) return "error";
-  if (content.includes("好了") || content.includes("初稿")) return "success";
+  if (content.includes("好了") || content.includes("完成")) return "success";
   return "default";
 }
 
 async function refreshMessages(projectId: string) {
   const state = await getProjectState(projectId);
   messages.value = state.messages;
+  capabilities.value = state.capabilities;
   return state;
 }
 
@@ -134,7 +205,6 @@ watch(
     if (!pid) {
       messages.value = [];
       submitError.value = null;
-      selectedRegion.value = null;
       agentBusy.value = false;
       agentExternalUrl.value = null;
       return;
@@ -153,7 +223,7 @@ watch(
   },
 );
 
-watch([messages, phase, statusDetail], async () => {
+watch([messages, phase, statusDetail, activityLabel], async () => {
   await nextTick();
   bottomRef.value?.scrollIntoView({ behavior: "smooth" });
 });
@@ -198,21 +268,27 @@ async function pollAgentRun(projectId: string, prompt: string) {
 }
 
 async function submitText(text: string) {
-  if (!props.projectId || !text.trim() || busy.value) return;
-  if (chatMode.value === "setup_required") {
-    submitError.value = "请先连接设计助手";
-    emit("openSetup");
+  if (!props.projectId || !text.trim() || sending.value) return;
+  if (chatMode.value !== "agent") {
+    submitError.value =
+      chatMode.value === null
+        ? "正在检测助手连接，请稍候再试"
+        : "请先连接设计助手";
+    if (chatMode.value === "setup_required") emit("openSetup");
+    return;
+  }
+  if (anyBusy.value) {
+    submitError.value = "助手还在处理上一条，请稍等…";
     return;
   }
 
   const prompt = text.trim();
-  const region = props.pick ? null : selectedRegion.value;
   sending.value = true;
   submitError.value = null;
   agentExternalUrl.value = null;
 
   try {
-    const turn = await sendTurn(props.projectId, prompt, props.pick, region);
+    const turn = await sendTurn(props.projectId, prompt, props.pick);
     await refreshMessages(props.projectId);
 
     if (turn.routing === "agent") {
@@ -220,7 +296,6 @@ async function submitText(text: string) {
       await refreshMessages(props.projectId);
       emit("turnComplete");
       emit("clearPick");
-      selectedRegion.value = null;
       return;
     }
 
@@ -244,108 +319,78 @@ async function handleSubmit(e?: Event) {
   await submitText(text);
 }
 
-async function useSample(text: string) {
-  if (!props.projectId) {
-    input.value = text;
-    emit("requestProject");
-    return;
-  }
-  await submitText(text);
+function focusInput() {
+  void nextTick(() => textareaRef.value?.focus());
 }
+
+watch(
+  () => props.pick,
+  (pick) => {
+    if (pick) focusInput();
+  },
+);
+
+defineExpose({ focusInput });
 </script>
 
 <template>
   <div class="chat-panel">
     <header class="chat-header">
       <div class="chat-header-main">
-        <h2>设计对话</h2>
+        <h2>设计助手</h2>
         <span class="chat-mode-badge" :title="modeHint">{{ modeLabel }}</span>
       </div>
-      <span
-        v-if="phaseLabel(phase, statusDetail ?? undefined)"
-        class="chat-status"
-        :class="{
-          'chat-status--error': phase === 'failed',
-          'chat-status--busy': showProgress,
-        }"
-      >
-        <span v-if="showProgress" class="spinner" aria-hidden="true" />
-        {{ phaseLabel(phase, statusDetail ?? undefined) }}
+      <span v-if="activityLabel" class="chat-status chat-status--busy">
+        <span class="spinner" aria-hidden="true" />
+        {{ activityLabel }}
       </span>
     </header>
 
-    <div v-if="submitError" class="chat-error-banner" role="alert">{{ submitError }}</div>
-
-    <div
-      v-if="chatMode === 'setup_required' && projectId"
-      class="chat-mode-banner"
-      role="status"
-    >
-      设计助手未连接，Web 对话暂不可用。
-      <button type="button" class="link-btn" @click="emit('openSetup')">连接设计助手</button>
-    </div>
-
-    <div v-if="agentExternalUrl" class="chat-mode-banner" role="status">
-      助手会话：
-      <a :href="agentExternalUrl" target="_blank" rel="noopener">在外部查看</a>
-    </div>
-
-    <div v-if="showProgress" class="session-progress" aria-live="polite">
-      <div
-        v-for="(step, i) in SESSION_STEPS"
-        :key="step.id"
-        class="session-step"
-        :class="{ active: currentStep === i, done: currentStep > i }"
+    <div v-if="projectId && versions.length > 0" class="version-timeline">
+      <span class="version-timeline-label">方案</span>
+      <button
+        v-for="v in versions"
+        :key="v.version"
+        type="button"
+        class="version-timeline-btn"
+        :class="{
+          active: selectedVersion === v.version,
+          'version-timeline-btn--partial': v.status !== 'complete',
+        }"
+        :title="v.prompt ?? undefined"
+        @click="emit('selectVersion', v.version)"
       >
-        {{ step.label }}
+        v{{ v.version }}
+      </button>
+    </div>
+
+    <div class="chat-panel-notices">
+      <div v-if="submitError" class="chat-error-banner" role="alert">{{ submitError }}</div>
+
+      <div
+        v-if="chatMode === 'setup_required' && projectId"
+        class="chat-mode-banner"
+        role="status"
+      >
+        设计助手未连接，无法对话建模。
+        <button type="button" class="link-btn" @click="emit('openSetup')">连接助手</button>
+      </div>
+
+      <div v-if="agentExternalUrl" class="chat-mode-banner" role="status">
+        外部会话：
+        <a :href="agentExternalUrl" target="_blank" rel="noopener">查看详情</a>
       </div>
     </div>
 
     <div class="chat-messages">
       <div v-if="!projectId" class="chat-onboarding">
-        <p class="chat-hint-title">在这里描述，左侧看模型</p>
-        <p class="chat-hint">新建项目后，用一句话说尺寸和用途即可开始。</p>
-        <div v-if="samplePrompts.length" class="prompt-chips prompt-chips--grid">
-          <button
-            v-for="text in samplePrompts"
-            :key="text"
-            type="button"
-            class="prompt-chip"
-            @click="
-              input = text;
-              emit('requestProject');
-            "
-          >
-            {{ text }}
-          </button>
-        </div>
+        <p class="chat-hint-title">用自然语言描述，助手生成 3D 模型</p>
+        <p class="chat-hint">新建项目后直接在这里对话，右侧查看图纸预览。</p>
       </div>
 
-      <div v-else-if="messages.length === 0 && !busy" class="chat-onboarding">
-        <template v-if="!hasModel">
-          <p class="chat-hint-title">说说你想做什么</p>
-          <p class="chat-hint">{{ modeHint }}</p>
-          <div class="prompt-chips prompt-chips--grid">
-            <button
-              v-for="text in samplePrompts"
-              :key="text"
-              type="button"
-              class="prompt-chip"
-              :disabled="busy"
-              @click="useSample(text)"
-            >
-              {{ text }}
-            </button>
-          </div>
-        </template>
-        <template v-else>
-          <p class="chat-hint-title">继续迭代方案</p>
-          <ul class="chat-tip-list">
-            <li>直接说：「孔加大」「整体缩小 10%」</li>
-            <li>在 3D 视图中点选位置，再描述修改</li>
-            <li>左侧可微调参数</li>
-          </ul>
-        </template>
+      <div v-else-if="messages.length === 0 && !anyBusy" class="chat-onboarding">
+        <p class="chat-hint-title">{{ hasModel ? "继续改方案" : "说说你想做什么" }}</p>
+        <p class="chat-hint">{{ hasModel ? "直接描述修改，助手会更新模型。" : modeHint }}</p>
       </div>
 
       <div
@@ -357,78 +402,36 @@ async function useSample(text: string) {
           `chat-bubble--${messageTone(m.content, m.role)}`,
         ]"
       >
-        <span class="chat-role">{{ m.role === "user" ? "你" : "助手" }}</span>
-        <p>{{ m.content }}</p>
+        <div class="chat-bubble-head">
+          <span class="chat-role">{{ roleLabel(m) }}</span>
+          <button
+            v-if="m.role === 'assistant' && versionForMessage(m)"
+            type="button"
+            class="chat-version-link"
+            :class="{ active: selectedVersion === versionForMessage(m)!.version }"
+            @click="emit('selectVersion', versionForMessage(m)!.version)"
+          >
+            v{{ versionForMessage(m)!.version }}
+          </button>
+        </div>
+        <ChatMessageBody :content="m.content" :role="m.role" />
       </div>
 
-      <div v-if="busy && sending" class="chat-bubble chat-bubble--assistant chat-bubble--loading">
-        <span class="chat-role">助手</span>
-        <p><span class="spinner spinner--inline" aria-hidden="true" /> 收到，开始处理…</p>
+      <div v-if="anyBusy" class="chat-activity">
+        <span class="spinner spinner--inline" aria-hidden="true" />
+        {{ activityLabel ?? "处理中…" }}
       </div>
 
       <div ref="bottomRef" />
     </div>
 
     <form class="chat-form" @submit="handleSubmit">
-      <div v-if="hasModel && !pick" class="edit-region-bar">
-        <span class="edit-region-label">改哪里</span>
-        <div class="region-chips">
-          <button
-            v-for="r in EDIT_REGIONS"
-            :key="r.id"
-            type="button"
-            class="region-chip"
-            :class="{ active: selectedRegion === r.label }"
-            :disabled="!canSend"
-            @click="selectedRegion = selectedRegion === r.label ? null : r.label"
-          >
-            {{ r.label }}
-          </button>
-        </div>
-      </div>
-
-      <div v-if="hasModel" class="edit-hints-bar">
-        <button
-          v-for="hint in hints"
-          :key="hint"
-          type="button"
-          class="edit-hint-chip"
-          :disabled="!canSend"
-          @click="input = hint"
-        >
-          {{ hint }}
-        </button>
-        <button
-          v-if="EDIT_HINTS.length > VISIBLE_HINTS"
-          type="button"
-          class="edit-hint-chip edit-hint-chip--more"
-          @click="showAllHints = !showAllHints"
-        >
-          {{ showAllHints ? "收起" : "更多" }}
-        </button>
-      </div>
-
-      <div
-        v-if="pick || selectedRegion"
-        class="context-banner"
-        :class="pick ? 'context-banner--pick' : 'context-banner--region'"
-      >
+      <div v-if="pick" class="context-banner context-banner--pick">
         <span class="context-banner-dot" aria-hidden="true" />
         <span class="context-banner-text">
-          <template v-if="pick">
-            点选位置：<strong>{{ formatPickShort(pick) }}</strong>
-          </template>
-          <template v-else>
-            修改部位：<strong>{{ selectedRegion }}</strong>
-          </template>
+          点选位置：<strong>{{ formatPickShort(pick) }}</strong>
         </span>
-        <button
-          type="button"
-          class="context-banner-clear"
-          @click="pick ? emit('clearPick') : (selectedRegion = null)"
-        >
-          清除
-        </button>
+        <button type="button" class="context-banner-clear" @click="emit('clearPick')">清除</button>
       </div>
 
       <div class="chat-input-wrap">
@@ -437,63 +440,18 @@ async function useSample(text: string) {
           v-model="input"
           :placeholder="inputPlaceholder"
           rows="2"
-          :disabled="!canSend"
           @keydown.enter.exact.prevent="handleSubmit()"
         />
         <button
           type="submit"
           class="btn-primary chat-send-btn"
-          :disabled="!canSend || !input.trim()"
+          :disabled="!canSend || !input.trim() || anyBusy"
           aria-label="发送"
         >
-          {{ busy ? "…" : "↑" }}
+          {{ sending ? "…" : "↑" }}
         </button>
       </div>
       <p class="chat-form-hint">Enter 发送 · Shift+Enter 换行</p>
     </form>
   </div>
 </template>
-
-<style scoped>
-.chat-mode-banner {
-  margin: 0 0 0.5rem;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.82rem;
-  background: #f8fafc;
-  border-radius: 8px;
-  color: #475569;
-  line-height: 1.4;
-}
-.link-btn {
-  border: none;
-  background: none;
-  color: #2563eb;
-  cursor: pointer;
-  padding: 0 0.15rem;
-  font: inherit;
-  text-decoration: underline;
-}
-.session-progress {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.35rem;
-  margin-bottom: 0.65rem;
-}
-.session-step {
-  text-align: center;
-  font-size: 0.72rem;
-  padding: 0.35rem 0.25rem;
-  border-radius: 6px;
-  background: #f1f5f9;
-  color: #94a3b8;
-}
-.session-step.active {
-  background: #dbeafe;
-  color: #1d4ed8;
-  font-weight: 600;
-}
-.session-step.done {
-  background: #dcfce7;
-  color: #166534;
-}
-</style>

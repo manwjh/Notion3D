@@ -1,0 +1,14 @@
+{
+  "id": "cable-clip",
+  "title": "线夹（卡扣式）",
+  "description": "圆形线材卡扣，带粘贴底座，适合 USB 线、网线等",
+  "tags": ["线夹", "理线", "实用"],
+  "category": "utility",
+  "license": "MIT",
+  "source": "notion3d-builtin",
+  "params": [
+    { "name": "cable_d", "label": "线径", "default": 5, "unit": "mm" },
+    { "name": "length", "label": "夹持长度", "default": 12, "unit": "mm" },
+    { "name": "wall", "label": "壁厚", "default": 1.8, "unit": "mm" }
+  ]
+}

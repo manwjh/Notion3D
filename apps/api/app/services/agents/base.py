@@ -51,6 +51,8 @@ class AgentAdapter(ABC):
         *,
         session_id: str | None = None,
         region: str | None = None,
+        turn_id: str | None = None,
+        latest_version: int | None = None,
     ) -> AgentSessionHandle: ...
 
     @abstractmethod

@@ -66,4 +66,7 @@
 
 .project-link-btn {
   white-space: nowrap;
+  max-width: min(220px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

@@ -48,7 +48,7 @@ class CursorSdkAdapter(AgentAdapter):
         elif not settings.cursor_sdk_bridge_base.strip():
             note = "需配置 NOTION3D_CURSOR_SDK_BRIDGE_BASE"
         else:
-            note = "需运行 agent-bridge：make bridge 或 make dev"
+            note = "需运行 make dev AGENT=cursor_sdk 或 make bridge"
         return AgentProviderInfo(
             id=self.id,
             title=self.title,
@@ -62,7 +62,7 @@ class CursorSdkAdapter(AgentAdapter):
         base = self.info()
         base.ready = await _bridge_ready()
         if base.configured and not base.ready and "make bridge" not in base.note:
-            base.note = "需运行 agent-bridge：make bridge 或 make dev"
+            base.note = "需运行 make dev AGENT=cursor_sdk 或 make bridge"
         return base
 
     def session_key(self, project_id: str) -> str:
@@ -75,9 +75,17 @@ class CursorSdkAdapter(AgentAdapter):
         *,
         session_id: str | None = None,
         region: str | None = None,
+        turn_id: str | None = None,
+        latest_version: int | None = None,
     ) -> AgentSessionHandle:
         logical_id = session_id or self.session_key(project_id)
-        prompt = build_agent_prompt(project_id, user_content, region=region)
+        prompt = build_agent_prompt(
+            project_id,
+            user_content,
+            turn_id=turn_id,
+            region=region,
+            latest_version=latest_version,
+        )
         url = f"{settings.cursor_sdk_bridge_base.rstrip('/')}/v1/turn"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
@@ -116,5 +124,5 @@ class CursorSdkAdapter(AgentAdapter):
             return reply
         status = str(data.get("status", ""))
         if status == "FINISHED":
-            return "Cursor SDK Agent 已完成。若已提交建模，请查看左侧 3D 预览。"
+            raise AgentAdapterError("Agent 未返回文本回复，请重试或查看预览是否已更新。")
         raise AgentAdapterError(f"SDK Agent 无回复（status={status}）")

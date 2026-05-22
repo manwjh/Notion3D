@@ -147,10 +147,10 @@ async function handleApply() {
           :disabled="busy || (generating && !code)"
           @change="onCodeChange"
         />
-        <p class="model-tools-tip">拖动滑块调整尺寸，然后点击「应用更改」。</p>
+        <p class="model-tools-tip">拖动滑块后点「应用更改」。此路径不经过设计助手。</p>
       </template>
       <p v-else class="model-tools-empty">
-        当前模型没有可调参数。如需精细控制，可切换到「高级代码」标签，或在右侧用对话描述修改。
+        当前模型没有可调参数。如需精细控制，可切换到「高级代码」标签，或在对话区描述修改。
       </p>
     </div>
 
@@ -167,11 +167,9 @@ async function handleApply() {
       />
       <p v-if="generating && !code && generationPhase" class="scad-waiting-hint">
         {{
-          generationPhase === "previewing"
-            ? "预览已显示，3D 模型仍在计算中…"
-            : generationPhase === "rendering"
-              ? "3D 模型即将加载…"
-              : "正在理解你的描述并生成模型…"
+          generationPhase === "rendering"
+            ? "3D 模型即将加载…"
+            : "正在生成 3D 模型…"
         }}
       </p>
     </div>

@@ -70,11 +70,18 @@ class Notion3DClient:
             body["region"] = region
         return self.request("POST", f"/api/projects/{project_id}/jobs/template", json_body=body)
 
-    def render_scad(self, project_id: str, scad_code: str, label: str = "MCP 渲染 SCAD") -> dict:
+    def render_scad(
+        self,
+        project_id: str,
+        scad_code: str,
+        label: str = "MCP 渲染 SCAD",
+        *,
+        source: str = "agent",
+    ) -> dict:
         return self.request(
             "POST",
             f"/api/projects/{project_id}/render-scad",
-            json_body={"scad_code": scad_code, "label": label},
+            json_body={"scad_code": scad_code, "label": label, "source": source},
         )
 
     def get_job(self, project_id: str, job_id: str) -> dict:
@@ -105,6 +112,68 @@ class Notion3DClient:
                 return job
             time.sleep(poll_interval)
         raise TimeoutError(f"Job {job_id} did not finish within {max_wait}s")
+
+    def list_templates(
+        self,
+        *,
+        tag: str | None = None,
+        category: str | None = None,
+        scope: str = "all",
+    ) -> list[dict]:
+        params: dict[str, str] = {"scope": scope}
+        if tag:
+            params["tag"] = tag
+        if category:
+            params["category"] = category
+        query = "&".join(f"{k}={v}" for k, v in params.items())
+        return self.request("GET", f"/api/templates?{query}")
+
+    def get_template(self, template_id: str) -> dict:
+        return self.request("GET", f"/api/templates/{template_id}")
+
+    def apply_template(
+        self,
+        template_id: str,
+        *,
+        project_id: str | None = None,
+        name: str | None = None,
+        params: dict[str, float] | None = None,
+        label: str | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {}
+        if project_id:
+            body["project_id"] = project_id
+        if name:
+            body["name"] = name
+        if params:
+            body["params"] = params
+        if label:
+            body["label"] = label
+        return self.request("POST", f"/api/templates/{template_id}/apply", json_body=body)
+
+    def save_template(
+        self,
+        project_id: str,
+        version: int,
+        *,
+        template_id: str,
+        title: str,
+        description: str | None = None,
+        tags: list[str] | None = None,
+        category: str | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {"id": template_id, "title": title}
+        if description:
+            body["description"] = description
+        if tags:
+            body["tags"] = tags
+        if category:
+            body["category"] = category
+        return self.request(
+            "POST",
+            f"/api/projects/{project_id}/versions/{version}/save-template",
+            json_body=body,
+        )
 
 
 def format_json(data: Any) -> str:

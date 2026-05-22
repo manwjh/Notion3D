@@ -1,0 +1,21 @@
+# Notion3D MCP — append to ~/.hermes/config.yaml under mcp_servers:
+#
+#   notion3d:
+#     command: notion3d-mcp
+#     env:
+#       NOTION3D_API_BASE: http://127.0.0.1:8000
+#       NOTION3D_WEB_BASE: http://localhost:5173
+#
+# Hermes API server (~/.hermes/.env):
+#
+#   API_SERVER_ENABLED=true
+#   API_SERVER_KEY=change-me-local-dev
+#
+# LLM provider keys are configured in Hermes (~/.hermes/config.yaml), not Notion3D.
+
+mcp_servers:
+  notion3d:
+    command: notion3d-mcp
+    env:
+      NOTION3D_API_BASE: http://127.0.0.1:8000
+      NOTION3D_WEB_BASE: http://localhost:5173

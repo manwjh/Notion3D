@@ -1,26 +1,23 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { GenerationState } from "../types/generation";
-import { SESSION_STEPS, phaseLabel, stepIndex } from "../types/generation";
+import { phaseLabel } from "../types/generation";
 
 const props = defineProps<{
   state: GenerationState;
   hasModel: boolean;
 }>();
 
-const activeStep = computed(() => stepIndex(props.state.phase));
 const label = computed(() => phaseLabel(props.state.phase, props.state.detail));
 
 const footnote = computed(() => {
   switch (props.state.phase) {
     case "generating":
-      return "复杂造型可能需要 1–3 分钟，请稍候";
-    case "previewing":
-      return "预览图已显示在左侧，3D 模型仍在计算";
+      return "复杂造型可能需要 1–3 分钟";
     case "rendering":
-      return "3D 模型即将呈现";
+      return "OpenSCAD 正在计算几何体";
     default:
-      return "正在处理你的请求…";
+      return null;
   }
 });
 </script>
@@ -47,22 +44,7 @@ const footnote = computed(() => {
         }}」
       </p>
 
-      <ol class="gen-steps">
-        <li
-          v-for="(step, i) in SESSION_STEPS"
-          :key="step.id"
-          class="gen-step"
-          :class="{ done: activeStep > i, active: activeStep === i }"
-        >
-          <span class="gen-step-num">{{ activeStep > i ? "✓" : i + 1 }}</span>
-          <div class="gen-step-body">
-            <strong>{{ step.label }}</strong>
-            <span>{{ activeStep === i ? step.hint : activeStep > i ? "已完成" : "等待中" }}</span>
-          </div>
-        </li>
-      </ol>
-
-      <p class="gen-footnote">{{ footnote }}</p>
+      <p v-if="footnote" class="gen-footnote">{{ footnote }}</p>
     </div>
   </div>
 </template>

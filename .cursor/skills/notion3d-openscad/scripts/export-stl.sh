@@ -20,5 +20,17 @@ for arg in "$@"; do
 done
 args+=("$SCAD")
 
-"$OPENSCAD" "${args[@]}"
+log="$(mktemp /tmp/notion3d-export-XXXXXX.log)"
+trap 'rm -f "$log"' EXIT
+
+if ! "$OPENSCAD" "${args[@]}" >"$log" 2>&1; then
+  cat "$log" >&2
+  exit 1
+fi
+if grep -qiE 'ERROR:|mesh is not closed' "$log"; then
+  cat "$log" >&2
+  echo "FAIL: non-manifold or OpenSCAD error" >&2
+  exit 1
+fi
+
 echo "Wrote $OUT ($(wc -c < "$OUT" | tr -d ' ') bytes)"
