@@ -12,6 +12,7 @@ import type {
 import { getJob, getProjectState, sendTurn } from "../api/client";
 import { mergeSessionPhase, sleep } from "../composables/useDesignTurn";
 import {
+  DESIGN_PHASE_LABEL,
   MODE_HINT,
   MODE_LABEL,
   assistantDisplayName,
@@ -20,6 +21,8 @@ import {
 import { phaseLabel, type GenerationState, type JobPhase } from "../types/generation";
 import { formatPickShort } from "../types/pick";
 import ChatMessageBody from "./ChatMessageBody.vue";
+import DesignContextBanner from "./DesignContextBanner.vue";
+import type { DesignContextView } from "./DesignContextBanner.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -30,6 +33,7 @@ const props = withDefaults(
     pick?: ModelPick | null;
     generation: GenerationState | null;
     activeTurn?: DesignTurn | null;
+    designContext?: DesignContextView | null;
     health?: Health | null;
     narrow?: boolean;
     versions?: ModelVersion[];
@@ -42,6 +46,7 @@ const props = withDefaults(
     autoSubmitInitial: false,
     pick: null,
     activeTurn: null,
+    designContext: null,
     narrow: false,
     versions: () => [],
     selectedVersion: null,
@@ -121,8 +126,18 @@ const activityLabel = computed(() => {
   if (session.value.lane === "render") {
     return phaseLabel(phase.value, statusDetail.value ?? undefined) ?? "正在生成 3D 模型…";
   }
-  if (session.value.lane === "agent") return "助手处理中…";
+  if (session.value.lane === "agent") {
+    const dp = session.value.designPhase;
+    if (dp && DESIGN_PHASE_LABEL[dp]) return DESIGN_PHASE_LABEL[dp];
+    return "助手处理中…";
+  }
   return null;
+});
+
+const designPhaseBadge = computed(() => {
+  const dp = props.activeTurn?.design_phase;
+  if (!dp || dp === "done") return null;
+  return DESIGN_PHASE_LABEL[dp] ?? dp;
 });
 
 const versionByJobId = computed(() => {
@@ -164,6 +179,7 @@ const inputPlaceholder = computed(() => {
   if (chatMode.value === "setup_required") return "请先连接设计助手（右上角「助手」）…";
   if (assistantChecking.value) return "正在检测助手连接…";
   if (anyBusy.value && !sending.value) return "助手处理中，可先写好下一条…";
+  if (props.pick?.element) return "说说想怎么改这个部件…";
   if (props.pick) return "说说想怎么改这里…";
   if (props.hasModel) return "继续描述想改什么…";
   return "描述你想做的物件…";
@@ -288,7 +304,12 @@ async function submitText(text: string) {
   agentExternalUrl.value = null;
 
   try {
-    const turn = await sendTurn(props.projectId, prompt, props.pick);
+    const turn = await sendTurn(
+      props.projectId,
+      prompt,
+      props.pick,
+      props.pick?.element ?? null,
+    );
     await refreshMessages(props.projectId);
 
     if (turn.routing === "agent") {
@@ -323,6 +344,13 @@ function focusInput() {
   void nextTick(() => textareaRef.value?.focus());
 }
 
+function prefillFromPick(p: ModelPick) {
+  const name = p.label ?? p.element ?? "选中部件";
+  if (!input.value.trim()) {
+    input.value = `请修改「${name}」：`;
+  }
+}
+
 watch(
   () => props.pick,
   (pick) => {
@@ -330,7 +358,7 @@ watch(
   },
 );
 
-defineExpose({ focusInput });
+defineExpose({ focusInput, prefillFromPick });
 </script>
 
 <template>
@@ -339,6 +367,7 @@ defineExpose({ focusInput });
       <div class="chat-header-main">
         <h2>设计助手</h2>
         <span class="chat-mode-badge" :title="modeHint">{{ modeLabel }}</span>
+        <span v-if="designPhaseBadge" class="chat-design-phase-badge">{{ designPhaseBadge }}</span>
       </div>
       <span v-if="activityLabel" class="chat-status chat-status--busy">
         <span class="spinner" aria-hidden="true" />
@@ -365,6 +394,7 @@ defineExpose({ focusInput });
     </div>
 
     <div class="chat-panel-notices">
+      <DesignContextBanner v-if="designContext" :context="designContext" />
       <div v-if="submitError" class="chat-error-banner" role="alert">{{ submitError }}</div>
 
       <div
@@ -385,7 +415,7 @@ defineExpose({ focusInput });
     <div class="chat-messages">
       <div v-if="!projectId" class="chat-onboarding">
         <p class="chat-hint-title">用自然语言描述，助手生成 3D 模型</p>
-        <p class="chat-hint">新建项目后直接在这里对话，右侧查看图纸预览。</p>
+        <p class="chat-hint">新建项目后直接在这里对话，中间视口会显示 3D 模型。</p>
       </div>
 
       <div v-else-if="messages.length === 0 && !anyBusy" class="chat-onboarding">
@@ -429,7 +459,7 @@ defineExpose({ focusInput });
       <div v-if="pick" class="context-banner context-banner--pick">
         <span class="context-banner-dot" aria-hidden="true" />
         <span class="context-banner-text">
-          点选位置：<strong>{{ formatPickShort(pick) }}</strong>
+          {{ pick.element ? "选中部件" : "点选位置" }}：<strong>{{ formatPickShort(pick) }}</strong>
         </span>
         <button type="button" class="context-banner-clear" @click="emit('clearPick')">清除</button>
       </div>

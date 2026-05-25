@@ -1,13 +1,21 @@
 import asyncio
 import re
 import shutil
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.config import settings
+from app.services import cad_parts, cad_validation
 
 
 class CadError(Exception):
     pass
+
+
+@dataclass
+class RenderResult:
+    path: Path
+    warnings: list[str] = field(default_factory=list)
 
 
 def openscad_available() -> bool:
@@ -23,6 +31,15 @@ def _sanitize_scad(code: str) -> str:
     if re.search(r"\b(import|include)\s*\(\s*['\"]?/", code):
         raise CadError("生成的 OpenSCAD 包含不允许的绝对路径引用")
     return code
+
+
+def prepare_scad(code: str) -> str:
+    """Sanitize SCAD before job enqueue or template save."""
+    return _sanitize_scad(code)
+
+
+def static_scad_warnings(scad_code: str) -> list[str]:
+    return cad_validation.analyze_scad_warnings(scad_code).warnings
 
 
 def prompt_to_scad_heuristic(prompt: str) -> str:
@@ -119,13 +136,42 @@ def _openscad_stderr_is_fatal(stderr_text: str) -> bool:
     return "error:" in stderr_text or "mesh is not closed" in lowered
 
 
-async def render_stl(scad_code: str, output_stl: Path) -> Path:
+async def render_part_stls(
+    scad_code: str,
+    out_dir: Path,
+    *,
+    project_id: str,
+    version: int,
+) -> dict | None:
+    """Render per-part STLs when SCAD uses notion3d:part + color() annotations."""
+    scad_code = prepare_scad(scad_code)
+    preamble, parts = cad_parts.parse_scad_parts(scad_code)
+    if not parts:
+        return None
+
+    parts_dir = out_dir / "parts"
+    parts_dir.mkdir(parents=True, exist_ok=True)
+    rendered: list[cad_parts.ScadPart] = []
+
+    for part in parts:
+        part_scad = cad_parts.build_part_scad(preamble, part)
+        part_stl = parts_dir / f"{part.id}.stl"
+        await render_stl(part_scad, part_stl)
+        rendered.append(part)
+
+    manifest = cad_parts.parts_manifest(project_id, version, rendered)
+    cad_parts.write_parts_manifest(out_dir / "parts.json", manifest)
+    return manifest
+
+
+async def render_stl(scad_code: str, output_stl: Path) -> RenderResult:
     if not openscad_available():
         raise CadError(
             f"未找到 OpenSCAD（{settings.openscad_bin}）。请安装: https://openscad.org/downloads.html"
         )
 
-    scad_code = _sanitize_scad(scad_code)
+    scad_code = prepare_scad(scad_code)
+    scad_warnings = cad_validation.analyze_scad_warnings(scad_code)
     scad_path = output_stl.with_suffix(".scad")
     scad_path.write_text(scad_code, encoding="utf-8")
 
@@ -147,7 +193,14 @@ async def render_stl(scad_code: str, output_stl: Path) -> Path:
     if not output_stl.exists():
         raise CadError("OpenSCAD 未生成 STL 文件")
 
-    return output_stl
+    stl_warnings = cad_validation.analyze_stl_warnings(output_stl)
+    warnings = cad_validation.merge_warnings(scad_warnings, stl_warnings)
+    return RenderResult(path=output_stl, warnings=warnings)
+
+
+async def validate_scad_render(scad_code: str, output_stl: Path) -> RenderResult:
+    """Render SCAD to STL for validation (same checks as the job pipeline)."""
+    return await render_stl(scad_code, output_stl)
 
 
 async def render_preview_png(scad_code: str, output_png: Path) -> Path | None:

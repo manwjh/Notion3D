@@ -13,6 +13,9 @@ const REPO_ROOT =
   process.env.NOTION3D_REPO_ROOT || path.resolve(__dirname, "../../..");
 const API_KEY = process.env.CURSOR_API_KEY || "";
 const MODEL = process.env.NOTION3D_CURSOR_MODEL || "composer-2.5";
+const MCP_PYTHON =
+  process.env.NOTION3D_PYTHON || process.env.PYTHON || "python3.11";
+const MCP_MODULE = process.env.NOTION3D_MCP_MODULE || "notion3d_mcp.server";
 
 /** @type {Map<string, import("@cursor/sdk").SDKAgent>} */
 const agents = new Map();
@@ -21,17 +24,26 @@ const agents = new Map();
 const runs = new Map();
 
 function mcpServers() {
-  return {
-    notion3d: {
-      type: "stdio",
-      command: process.env.NOTION3D_MCP_COMMAND || "notion3d-mcp",
-      env: {
-        NOTION3D_API_BASE:
-          process.env.NOTION3D_API_BASE || "http://127.0.0.1:8000",
-        NOTION3D_WEB_BASE:
-          process.env.NOTION3D_WEB_BASE || "http://localhost:5173",
-      },
+  const command =
+    process.env.NOTION3D_MCP_COMMAND || MCP_PYTHON;
+  const args = process.env.NOTION3D_MCP_COMMAND
+    ? undefined
+    : ["-m", MCP_MODULE];
+  const server = {
+    type: "stdio",
+    command,
+    env: {
+      NOTION3D_API_BASE:
+        process.env.NOTION3D_API_BASE || "http://127.0.0.1:8000",
+      NOTION3D_WEB_BASE:
+        process.env.NOTION3D_WEB_BASE || "http://localhost:5173",
     },
+  };
+  if (args) {
+    server.args = args;
+  }
+  return {
+    notion3d: server,
   };
 }
 
@@ -41,6 +53,11 @@ function baseOptions(logicalId) {
     agentId: logicalId,
     name: `Notion3D ${logicalId}`,
     model: { id: MODEL },
+    instructions:
+      "You are the Notion3D design agent. Follow project Skills in order: " +
+      "notion3d-intake → notion3d-plan → notion3d-forge-author → notion3d-mcp → notion3d-review. " +
+      "Before render_forge: notion3d_report_design_plan. After wait_job: notion3d_report_design_review. " +
+      "Default from_scratch or edit previous model.forge.js; list_templates only for demo templates.",
     local: {
       cwd: REPO_ROOT,
       settingSources: ["project"],
@@ -146,6 +163,8 @@ async function handleHealth(_req, res) {
     cursor_api_ready: keyOk,
     repo_root: REPO_ROOT,
     model: MODEL,
+    mcp_python: MCP_PYTHON,
+    mcp_module: MCP_MODULE,
   });
 }
 

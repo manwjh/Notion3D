@@ -25,3 +25,26 @@ export function assistantDisplayName(
   if (activeId && ASSISTANT_LABEL[activeId]) return ASSISTANT_LABEL[activeId];
   return "设计助手";
 }
+
+export const DESIGN_PHASE_LABEL: Record<string, string> = {
+  intake: "理解需求",
+  plan: "制定方案",
+  author: "编写模型",
+  render: "渲染网格",
+  review: "验收检查",
+  done: "已完成",
+  blocked: "已阻塞",
+};
+
+export const PLAN_STRATEGY_LABEL: Record<string, string> = {
+  template_apply: "应用模板",
+  template_edit: "改模板源码",
+  from_scratch: "从零编写",
+  chat_only: "仅对话",
+};
+
+export const REVIEW_STATUS_LABEL: Record<string, string> = {
+  pass: "通过",
+  retry: "需修改",
+  accept_warnings: "接受警告",
+};

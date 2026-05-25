@@ -11,14 +11,14 @@ from notion3d_mcp.links import resolve_web_base_from_health
 mcp = FastMCP(
     "notion3d",
     instructions=(
-        "Notion3D OpenSCAD engine (no LLM). YOU (the Agent) generate OpenSCAD — "
-        "always use notion3d_render_scad for modeling (submits SCAD, binds to active design turn). "
-        "Do NOT use notion3d_template except for trivial test primitives in dev. "
-        "Jobs are async: poll with notion3d_get_job or notion3d_wait_job. "
-        "User is already in the Web workbench — do not ask them to open web_url. "
-        "Follow notion3d-openscad Skill: parametric mm SCAD, validate before submit. "
-        "For common shapes, check notion3d_list_templates before writing SCAD from scratch. "
-        "Engine rejects non-manifold meshes."
+        "Notion3D ForgeCAD engine (no LLM). Follow the multi-phase design Skills: "
+        "notion3d-intake → notion3d-plan → notion3d-forge-author → notion3d-mcp → notion3d-review. "
+        "Before authoring: notion3d_report_design_plan (from_scratch or version edit; "
+        "list_templates only for explicit demo). "
+        "After render: notion3d_report_design_review. "
+        "Use notion3d_render_forge for modeling (binds active design turn). "
+        "Legacy OpenSCAD: notion3d_render_scad only for templates/legacy scope. "
+        "Jobs are async: notion3d_wait_job. User is in Web workbench — do not ask for web_url."
     ),
 )
 
@@ -44,7 +44,7 @@ def _out(data: object) -> str:
 
 @mcp.tool()
 def notion3d_health() -> str:
-    """Check Notion3D API and OpenSCAD availability."""
+    """Check Notion3D API and ForgeCAD availability."""
     health = client.health()
     resolve_web_base_from_health(health)
     global _web_base_ready
@@ -120,6 +120,16 @@ def notion3d_list_versions(project_id: str) -> str:
 
 
 @mcp.tool()
+def notion3d_get_forge_sources(project_id: str, version: int) -> str:
+    """Read model.forge.js and src/ sub-files for a version.
+
+    Use before editing multi-file assemblies (importAssembly). Returns forge_code
+    and files dict suitable for notion3d_render_forge files_json.
+    """
+    return _out(client.get_forge_sources(project_id, version))
+
+
+@mcp.tool()
 def notion3d_list_templates(
     tag: str | None = None,
     category: str | None = None,
@@ -146,7 +156,7 @@ def notion3d_apply_template(
     """Apply a library template to a project (creates project if project_id omitted).
 
     params_json: optional JSON object of param overrides, e.g. {"size": 40, "module_mm": 2}.
-    For heavy edits: notion3d_get_template → modify SCAD → notion3d_render_scad.
+    For heavy edits: notion3d_get_template → modify forge_code → notion3d_render_forge.
     """
     import json
 
@@ -192,16 +202,36 @@ def notion3d_save_template(
 
 
 @mcp.tool()
+def notion3d_render_forge(
+    project_id: str,
+    forge_code: str,
+    label: str = "MCP 渲染 ForgeCAD",
+    files_json: str | None = None,
+) -> str:
+    """Submit Agent-generated ForgeCAD (.forge.js) for assembly render.
+
+    Preferred path for multi-part models. Returns parts.json for Web assembly viewer.
+    Optional files_json: JSON object of sub-files under src/, e.g.
+    {"motor.forge.js": "return box(10,10,10);"} for importAssembly("src/motor.forge.js").
+    See notion3d-forge-author skill.
+    """
+    files = None
+    if files_json:
+        import json
+
+        files = json.loads(files_json)
+        if not isinstance(files, dict):
+            raise ValueError("files_json must be a JSON object")
+    return _out(client.render_forge(project_id, forge_code, label=label, files=files))
+
+
+@mcp.tool()
 def notion3d_render_scad(
     project_id: str,
     scad_code: str,
     label: str = "MCP 渲染 SCAD",
 ) -> str:
-    """Submit Agent-generated OpenSCAD for STL rendering.
-
-    Preferred for complex models. Engine rejects SCAD that produces non-closed meshes.
-    See notion3d-openscad skill for domain examples and validation.
-    """
+    """Submit legacy OpenSCAD for STL rendering (templates/legacy scope only)."""
     return _out(client.render_scad(project_id, scad_code, label=label))
 
 
@@ -215,6 +245,72 @@ def notion3d_resume_stl(project_id: str, version: int) -> str:
 def notion3d_list_messages(project_id: str) -> str:
     """List chat history for a project."""
     return _out(client.list_messages(project_id))
+
+
+@mcp.tool()
+def notion3d_get_design_state(project_id: str) -> str:
+    """Get active design turn phase, plan, and review artifacts."""
+    return _out(client.get_design_state(project_id))
+
+
+@mcp.tool()
+def notion3d_report_design_plan(
+    project_id: str,
+    task_class: str,
+    summary: str,
+    strategy: str,
+    turn_id: str | None = None,
+    template_id: str | None = None,
+    params_json: str | None = None,
+    modules_json: str | None = None,
+    assumptions_json: str | None = None,
+) -> str:
+    """Record modeling plan before authoring SCAD. Advances turn to author (or blocked for class C).
+
+    task_class: A | B | C
+    strategy: template_apply | template_edit | from_scratch | chat_only
+    """
+    import json
+
+    params = json.loads(params_json) if params_json else None
+    modules = json.loads(modules_json) if modules_json else None
+    assumptions = json.loads(assumptions_json) if assumptions_json else None
+    return _out(
+        client.report_design_plan(
+            project_id,
+            task_class=task_class,
+            summary=summary,
+            strategy=strategy,
+            turn_id=turn_id,
+            template_id=template_id,
+            params=params,
+            modules=modules,
+            assumptions=assumptions,
+        )
+    )
+
+
+@mcp.tool()
+def notion3d_report_design_review(
+    project_id: str,
+    status: str,
+    turn_id: str | None = None,
+    notes_json: str | None = None,
+    retry_phase: str | None = None,
+) -> str:
+    """Record design review after render. status: pass | retry | accept_warnings. retry_phase: plan | author."""
+    import json
+
+    notes = json.loads(notes_json) if notes_json else None
+    return _out(
+        client.report_design_review(
+            project_id,
+            status=status,
+            turn_id=turn_id,
+            notes=notes,
+            retry_phase=retry_phase,
+        )
+    )
 
 
 def main() -> None:

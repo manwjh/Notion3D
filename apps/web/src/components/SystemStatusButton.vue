@@ -28,7 +28,7 @@ function modeLabel(health: Health | null) {
     <button
       type="button"
       class="sys-status-btn"
-      :class="`sys-status-btn--${!health ? 'unknown' : health.openscad_available ? 'ok' : 'warn'}`"
+      :class="`sys-status-btn--${!health ? 'unknown' : health.forgecad_available ? 'ok' : 'warn'}`"
       :aria-expanded="open"
       aria-label="连接状态"
       title="连接状态"
@@ -36,7 +36,7 @@ function modeLabel(health: Health | null) {
     >
       <span
         class="sys-status-dot"
-        :class="`sys-status-dot--${!health ? 'unknown' : health.openscad_available ? 'ok' : 'warn'}`"
+        :class="`sys-status-dot--${!health ? 'unknown' : health.forgecad_available ? 'ok' : 'warn'}`"
         aria-hidden="true"
       />
     </button>
@@ -44,11 +44,18 @@ function modeLabel(health: Health | null) {
       <p class="sys-status-title">连接状态</p>
       <p v-if="!health" class="sys-status-empty">无法连接服务，请运行 make dev AGENT=… 启动。</p>
       <ul v-else class="sys-status-list">
-        <li :class="health.openscad_available ? 'ok' : 'warn'">
+        <li :class="health.forgecad_available ? 'ok' : 'warn'">
           <span class="sys-status-item-dot" aria-hidden="true" />
           <div>
-            <strong>建模引擎</strong>
-            <span>{{ health.openscad_available ? "就绪" : "未安装 OpenSCAD" }}</span>
+            <strong>ForgeCAD</strong>
+            <span>{{ health.forgecad_available ? "就绪" : "未安装 — cd apps/forge-runner && npm install" }}</span>
+          </div>
+        </li>
+        <li v-if="health.openscad_available" class="ok">
+          <span class="sys-status-item-dot" aria-hidden="true" />
+          <div>
+            <strong>OpenSCAD (legacy)</strong>
+            <span>就绪</span>
           </div>
         </li>
         <li :class="health.web_chat_mode === 'agent' ? 'ok' : 'warn'">

@@ -4,10 +4,12 @@ import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
 import { describePick, type ModelPick } from "../types/pick";
+import type { PartsManifest } from "../types/parts";
 
 const props = withDefaults(
   defineProps<{
     stlUrl: string | null;
+    partsUrl?: string | null;
     loading?: boolean;
     loadingLabel?: string | null;
     legacyIncomplete?: boolean;
@@ -20,20 +22,24 @@ const props = withDefaults(
     legacyIncomplete: false,
     pickMode: false,
     pick: null,
+    partsUrl: null,
   },
 );
 
-const emit = defineEmits<{ pick: [value: ModelPick] }>();
+const emit = defineEmits<{ pick: [value: ModelPick]; "parts-loaded": [parts: PartsManifest["parts"]] }>();
 
 const canvasHost = ref<HTMLElement | null>(null);
 const error = ref<string | null>(null);
 const meshLoading = ref(false);
+const loadedParts = ref<PartsManifest["parts"]>([]);
+const partMeshes = new Map<string, THREE.Mesh>();
 
 let renderer: THREE.WebGLRenderer | null = null;
 let scene: THREE.Scene | null = null;
 let camera: THREE.PerspectiveCamera | null = null;
 let controls: OrbitControls | null = null;
 let mesh: THREE.Mesh | null = null;
+let modelRoot: THREE.Group | null = null;
 let pickGroup: THREE.Group | null = null;
 let grid: THREE.GridHelper | null = null;
 let animId = 0;
@@ -50,6 +56,35 @@ function alignGeometryOnBuildPlate(geometry: THREE.BufferGeometry) {
   geometry.translate(-centerX, -box.min.y, -centerZ);
   geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
+}
+
+function alignRootOnBuildPlate(root: THREE.Object3D) {
+  root.rotation.x = -Math.PI / 2;
+  root.updateMatrixWorld(true);
+  const box = new THREE.Box3().setFromObject(root);
+  const centerX = (box.min.x + box.max.x) / 2;
+  const centerZ = (box.min.z + box.max.z) / 2;
+  root.position.set(-centerX, -box.min.y, -centerZ);
+  root.updateMatrixWorld(true);
+}
+
+function fitCameraToObject(object: THREE.Object3D) {
+  if (!camera || !controls) return;
+  const box = new THREE.Box3().setFromObject(object);
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  if (!sphere || sphere.radius <= 0) return;
+  const dist = (sphere.radius / Math.sin((camera.fov * Math.PI) / 360)) * 1.6;
+  camera.position.set(
+    sphere.center.x + dist,
+    sphere.center.y + dist * 0.75,
+    sphere.center.z + dist,
+  );
+  camera.near = Math.max(0.1, sphere.radius / 100);
+  camera.far = dist * 20;
+  camera.lookAt(sphere.center);
+  camera.updateProjectionMatrix();
+  controls.target.copy(sphere.center);
+  controls.update();
 }
 
 function fitCamera(geometry: THREE.BufferGeometry) {
@@ -120,6 +155,74 @@ function disposeMesh() {
     else mesh.material.dispose();
     mesh = null;
   }
+  if (modelRoot && scene) {
+    scene.remove(modelRoot);
+    modelRoot.traverse((obj) => {
+      if (obj instanceof THREE.Mesh) {
+        obj.geometry.dispose();
+        if (Array.isArray(obj.material)) obj.material.forEach((m) => m.dispose());
+        else obj.material.dispose();
+      }
+    });
+    modelRoot = null;
+  }
+  partMeshes.clear();
+  loadedParts.value = [];
+}
+
+async function loadPartsManifest(url: string) {
+  if (!scene) return;
+  meshLoading.value = true;
+  error.value = null;
+  disposeMesh();
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      if (props.stlUrl) {
+        meshLoading.value = false;
+        await loadStl(props.stlUrl);
+        return;
+      }
+      throw new Error("部件清单加载失败");
+    }
+    const manifest = (await res.json()) as PartsManifest;
+    if (!manifest.parts?.length) throw new Error("部件清单为空");
+
+    const loader = new STLLoader();
+    const root = new THREE.Group();
+    partMeshes.clear();
+    for (const part of manifest.parts) {
+      const geo = await loader.loadAsync(`${part.stl_url}?v=${encodeURIComponent(part.id)}`);
+      geo.computeVertexNormals();
+      const opacity = part.opacity ?? 1;
+      const partMesh = new THREE.Mesh(
+        geo,
+        new THREE.MeshStandardMaterial({
+          color: part.color,
+          metalness: 0.12,
+          roughness: 0.45,
+          transparent: opacity < 1,
+          opacity,
+        }),
+      );
+      partMesh.castShadow = true;
+      partMesh.receiveShadow = true;
+      partMesh.userData.partId = part.id;
+      partMesh.userData.partLabel = part.label;
+      partMeshes.set(part.id, partMesh);
+      root.add(partMesh);
+    }
+    loadedParts.value = manifest.parts;
+    emit("parts-loaded", manifest.parts);
+    alignRootOnBuildPlate(root);
+    modelRoot = root;
+    scene.add(root);
+    fitCameraToObject(root);
+  } catch (e) {
+    error.value = e instanceof Error ? e.message : "模型加载失败";
+  } finally {
+    meshLoading.value = false;
+  }
 }
 
 async function loadStl(url: string) {
@@ -151,17 +254,24 @@ async function loadStl(url: string) {
 }
 
 function onPointerClick(ev: MouseEvent) {
-  if (!props.pickMode || !mesh || !camera || !canvasHost.value) return;
+  if (!props.pickMode || !camera || !canvasHost.value) return;
+  const target = modelRoot ?? mesh;
+  if (!target) return;
   const rect = canvasHost.value.getBoundingClientRect();
   pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  const hits = raycaster.intersectObject(mesh);
+  const hits = modelRoot
+    ? raycaster.intersectObjects(modelRoot.children, true)
+    : raycaster.intersectObject(mesh as THREE.Mesh);
   if (hits.length === 0) return;
   const hit = hits[0];
   const p = hit.point;
   const n = hit.face?.normal?.clone() ?? new THREE.Vector3(0, 1, 0);
-  n.transformDirection(mesh.matrixWorld).normalize();
+  const hitMesh = hit.object as THREE.Mesh;
+  n.transformDirection(hitMesh.matrixWorld).normalize();
+  const partId = hitMesh.userData.partId as string | undefined;
+  const partLabel = hitMesh.userData.partLabel as string | undefined;
   emit("pick", {
     x: p.x,
     y: p.y,
@@ -169,7 +279,10 @@ function onPointerClick(ev: MouseEvent) {
     nx: n.x,
     ny: n.y,
     nz: n.z,
-    label: describePick(p.x, p.y, p.z, n.x, n.y, n.z),
+    element: partId ?? null,
+    label: partId
+      ? partLabel ?? partId
+      : describePick(p.x, p.y, p.z, n.x, n.y, n.z),
   });
 }
 
@@ -236,14 +349,16 @@ function initThree() {
 
   animate();
   resizeRenderer();
-  if (props.stlUrl) void loadStl(props.stlUrl);
+  if (props.partsUrl) void loadPartsManifest(props.partsUrl);
+  else if (props.stlUrl) void loadStl(props.stlUrl);
 }
 
 async function ensureViewerReady() {
   await nextTick();
   initThree();
   resizeRenderer();
-  if (props.stlUrl && scene) await loadStl(props.stlUrl);
+  if (props.partsUrl && scene) await loadPartsManifest(props.partsUrl);
+  else if (props.stlUrl && scene) await loadStl(props.stlUrl);
 }
 
 function destroyThree() {
@@ -271,11 +386,11 @@ function destroyThree() {
 }
 
 watch(
-  () => props.stlUrl,
-  (url) => {
+  () => [props.stlUrl, props.partsUrl] as const,
+  ([url, partsUrl]) => {
     error.value = null;
     void ensureViewerReady().then(() => {
-      if (!url) disposeMesh();
+      if (!url && !partsUrl) disposeMesh();
     });
   },
 );
@@ -291,8 +406,20 @@ watch(
   () => props.pickMode,
   (mode) => {
     if (controls) controls.enabled = !mode;
-    if (mesh?.material instanceof THREE.MeshStandardMaterial) {
-      mesh.material.color.set(mode ? "#8ec0ff" : "#6ea8fe");
+    const tint = mode ? "#8ec0ff" : null;
+    if (mesh?.material instanceof THREE.MeshStandardMaterial && tint) {
+      mesh.material.color.set(tint);
+    } else if (mesh?.material instanceof THREE.MeshStandardMaterial) {
+      mesh.material.color.set("#6ea8fe");
+    }
+    if (modelRoot) {
+      modelRoot.traverse((obj) => {
+        if (!(obj instanceof THREE.Mesh)) return;
+        const mat = obj.material;
+        if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+        if (mode) mat.emissive.set("#224466");
+        else mat.emissive.set("#000000");
+      });
     }
     if (!mode) document.body.style.cursor = "";
   },
@@ -310,6 +437,48 @@ onMounted(() => {
   void ensureViewerReady();
 });
 onUnmounted(destroyThree);
+
+function setPartVisible(partId: string, visible: boolean) {
+  const mesh = partMeshes.get(partId);
+  if (mesh) mesh.visible = visible;
+}
+
+function setPartOpacity(partId: string, opacity: number) {
+  const mesh = partMeshes.get(partId);
+  if (!mesh) return;
+  const mat = mesh.material;
+  if (!(mat instanceof THREE.MeshStandardMaterial)) return;
+  mat.transparent = opacity < 1;
+  mat.opacity = opacity;
+  mat.needsUpdate = true;
+}
+
+function fitPart(partId: string) {
+  const mesh = partMeshes.get(partId);
+  if (mesh) fitCameraToObject(mesh);
+}
+
+function highlightPart(partId: string | null) {
+  for (const [id, mesh] of partMeshes) {
+    const mat = mesh.material;
+    if (!(mat instanceof THREE.MeshStandardMaterial)) continue;
+    if (partId && id === partId) {
+      mat.emissive.set("#554400");
+      mat.emissiveIntensity = 0.45;
+    } else {
+      mat.emissive.set("#000000");
+      mat.emissiveIntensity = 1;
+    }
+    mat.needsUpdate = true;
+  }
+}
+
+function fitAll() {
+  if (modelRoot) fitCameraToObject(modelRoot);
+  else if (mesh) fitCameraToObject(mesh);
+}
+
+defineExpose({ setPartVisible, setPartOpacity, fitPart, fitAll, highlightPart, loadedParts });
 </script>
 
 <template>
@@ -319,7 +488,9 @@ onUnmounted(destroyThree);
       class="viewer-root viewer-root--canvas"
       :class="{ 'viewer-root--pick': pickMode, 'viewer-root--hidden': !stlUrl }"
     >
-      <div v-if="pickMode" class="viewer-pick-hint">点击模型表面，回对话区描述修改</div>
+      <div v-if="pickMode" class="viewer-pick-hint">
+        点击模型部件（有分色标注时按元素选中），回对话区描述修改
+      </div>
       <p v-if="error" class="viewer-error">{{ error }}</p>
       <span v-if="meshLoading" class="viewer-loading viewer-loading--overlay">加载模型…</span>
     </div>

@@ -14,19 +14,16 @@ def assistant_label(provider_id: str | None) -> str | None:
 
 
 def web_chat_mode() -> str:
-    active = active_provider_id()
-    if active:
-        return "agent"
-    # Cache may be cold before first refresh; configured provider still counts as connectable.
     from app.config import settings
+    from app.services.agents.registry import _ready_cache, get_adapter
 
     choice = (settings.agent_provider or "cursor_sdk").strip().lower()
     if choice in ("engine", "none", "off"):
         return "setup_required"
-    from app.services.agents.registry import _ready_cache, get_adapter
-
     adapter = get_adapter(choice)
-    if adapter and adapter.info().configured and _ready_cache.get(choice) is not False:
+    if not adapter or not adapter.info().configured:
+        return "setup_required"
+    if _ready_cache.get(choice) is True:
         return "agent"
     return "setup_required"
 

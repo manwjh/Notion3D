@@ -1,0 +1,12 @@
+{
+  "id": "parametric-cube",
+  "title": "参数化立方体",
+  "description": "FDM 校准 / smoke test 用基础立方体",
+  "tags": ["基础", "测试", "立方体"],
+  "category": "basic",
+  "license": "Public-Domain",
+  "source": "OpenSCAD primitive",
+  "params": [
+    { "name": "size", "label": "边长", "default": 20, "unit": "mm" }
+  ]
+}

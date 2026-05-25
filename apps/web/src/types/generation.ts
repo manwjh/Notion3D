@@ -13,6 +13,7 @@ export type GenerationState = {
   busy: boolean;
   stlReady?: boolean;
   version?: number | null;
+  validationWarnings?: string[];
 };
 
 type JobLike = {
@@ -22,6 +23,7 @@ type JobLike = {
   stl_ready?: boolean;
   version?: number | null;
   message?: string | null;
+  validation_warnings?: string[];
 };
 
 const PHASE_MAP: Record<string, JobPhase> = {
@@ -74,5 +76,6 @@ export function jobToGenerationState(
     busy,
     stlReady: job?.stl_ready ?? false,
     version: job?.version ?? null,
+    validationWarnings: job?.validation_warnings ?? [],
   };
 }

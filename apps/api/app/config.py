@@ -24,6 +24,10 @@ class Settings(BaseSettings):
 
     data_dir: Path = _REPO_ROOT / "data"
     templates_dir: Path = _REPO_ROOT / "templates"
+    cad_backend: str = "forgecad"
+    node_bin: str = "node"
+    forgecad_bin: str = "forgecad"
+    forge_runner_dir: Path = _REPO_ROOT / "apps" / "forge-runner"
     openscad_bin: str = "openscad"
     web_base_url: str = Field(
         default="http://localhost:5173",

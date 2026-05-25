@@ -1,18 +1,23 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { friendlyParamLabel, parseScadParams, setScadParam } from "../utils/scadParams";
+import {
+  parseModelParams,
+  setModelParam,
+  type SourceBackend,
+} from "../utils/modelParams";
 
 const props = defineProps<{
   code: string;
+  backend?: SourceBackend | null;
   disabled?: boolean;
 }>();
 
 const emit = defineEmits<{ change: [code: string] }>();
 
-const params = computed(() => parseScadParams(props.code));
+const params = computed(() => parseModelParams(props.code, props.backend));
 
 function update(name: string, value: number) {
-  emit("change", setScadParam(props.code, name, value));
+  emit("change", setModelParam(props.code, name, value, props.backend));
 }
 </script>
 
@@ -23,12 +28,12 @@ function update(name: string, value: number) {
     </div>
     <div class="param-grid">
       <label v-for="p in params" :key="p.name" class="param-field">
-        <span class="param-label">{{ friendlyParamLabel(p.name) }}</span>
+        <span class="param-label">{{ p.label }}</span>
         <div class="param-controls">
           <input
             type="range"
-            :min="0"
-            :max="Math.max(p.value * 3, 100)"
+            :min="p.min"
+            :max="p.max"
             :step="p.value < 1 ? 0.1 : 1"
             :value="p.value"
             :disabled="disabled"
@@ -44,7 +49,7 @@ function update(name: string, value: number) {
               update(p.name, parseFloat(($event.target as HTMLInputElement).value))
             "
           />
-          <span class="param-unit">mm</span>
+          <span class="param-unit">{{ p.unit }}</span>
         </div>
       </label>
     </div>

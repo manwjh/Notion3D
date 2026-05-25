@@ -75,13 +75,27 @@
 .workspace {
   flex: 1;
   display: grid;
-  grid-template-columns: clamp(360px, 32vw, 480px) minmax(0, 1fr);
+  grid-template-columns:
+    clamp(240px, 22vw, 300px)
+    minmax(0, 1fr)
+    clamp(320px, 28vw, 420px);
   min-height: 0;
   overflow: hidden;
 }
 
 .workspace--agent-first {
-  grid-template-columns: clamp(360px, 32vw, 480px) minmax(0, 1fr);
+  grid-template-columns:
+    clamp(240px, 22vw, 300px)
+    minmax(0, 1fr)
+    clamp(320px, 28vw, 420px);
+}
+
+.structure-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  background: var(--bg-surface);
 }
 
 .studio-pane {
@@ -96,8 +110,8 @@
 .chat-pane {
   min-width: 0;
   min-height: 0;
-  border-right: 1px solid var(--border);
-  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.12);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.1);
 }
 
 .brand-mark {
@@ -156,20 +170,6 @@
   background: #263042;
 }
 
-
-.studio-stack {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.studio-stack .viewer-root {
-  flex: 1;
-  min-height: 200px;
-}
-
 .scad-editor {
   flex: 1;
   min-height: 0;
@@ -192,9 +192,17 @@
   letter-spacing: 0.02em;
 }
 
-.brand-subtitle {
-  color: #6b7280;
+.structure-empty {
+  padding: 1rem 0.75rem;
   font-size: 0.78rem;
+  color: var(--text-subtle);
+  line-height: 1.45;
+}
+
+.structure-empty p {
+  margin: 0 0 0.35rem;
+  color: var(--text-muted);
+  font-weight: 600;
 }
 
 .viewport-pane {
@@ -211,7 +219,7 @@
   }
 
   .workspace--agent-first {
-    grid-template-columns: minmax(280px, 38vw) minmax(0, 1fr);
+    grid-template-columns: clamp(200px, 24vw, 260px) minmax(0, 1fr) clamp(280px, 32vw, 360px);
   }
 }
 
@@ -225,18 +233,29 @@
     grid-template-rows: minmax(0, 1fr);
   }
 
-  .workspace--narrow.workspace--show-studio .chat-pane {
+  .workspace--narrow.workspace--show-structure .studio-pane,
+  .workspace--narrow.workspace--show-structure .chat-pane {
     display: none;
   }
 
+  .workspace--narrow.workspace--show-viewport .structure-pane,
+  .workspace--narrow.workspace--show-viewport .chat-pane {
+    display: none;
+  }
+
+  .workspace--narrow.workspace--show-chat .structure-pane,
   .workspace--narrow.workspace--show-chat .studio-pane {
     display: none;
   }
 
   .chat-pane {
-    border-right: none;
+    border-left: none;
     box-shadow: none;
     min-height: 0;
+  }
+
+  .structure-pane {
+    border-right: none;
   }
 
   .model-tools-panel {

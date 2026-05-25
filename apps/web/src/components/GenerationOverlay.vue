@@ -15,7 +15,7 @@ const footnote = computed(() => {
     case "generating":
       return "复杂造型可能需要 1–3 分钟";
     case "rendering":
-      return "OpenSCAD 正在计算几何体";
+      return "ForgeCAD 正在计算装配网格";
     default:
       return null;
   }

@@ -7,10 +7,6 @@
     min-height: 180px;
   }
 
-  .studio-stack--with-tools .viewer-root {
-    min-height: 160px;
-  }
-
   .version-bar-row {
     align-items: flex-start;
   }

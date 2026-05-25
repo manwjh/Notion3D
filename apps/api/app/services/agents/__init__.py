@@ -11,6 +11,7 @@ from app.services.agents.registry import (
     list_provider_info,
     refresh_provider_cache,
     resolve_adapter,
+    resolve_adapter_live,
 )
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "list_provider_info",
     "refresh_provider_cache",
     "resolve_adapter",
+    "resolve_adapter_live",
 ]

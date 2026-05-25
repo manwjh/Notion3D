@@ -1,0 +1,15 @@
+{
+  "id": "open-enclosure",
+  "title": "敞口盒（ForgeCAD）",
+  "description": "参数化敞口外壳，适合收纳/电子件",
+  "tags": ["enclosure", "box", "forge"],
+  "category": "enclosure",
+  "format": "forge",
+  "license": "MIT",
+  "params": [
+    { "name": "Outer Width", "label": "Outer Width", "default": 80, "unit": "mm" },
+    { "name": "Outer Length", "label": "Outer Length", "default": 60, "unit": "mm" },
+    { "name": "Outer Height", "label": "Outer Height", "default": 40, "unit": "mm" },
+    { "name": "Wall", "label": "Wall", "default": 1.8, "unit": "mm" }
+  ]
+}

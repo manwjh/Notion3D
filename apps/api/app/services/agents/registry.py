@@ -68,11 +68,24 @@ def resolve_adapter(preferred: str | None = None) -> AgentAdapter | None:
     adapter = _ADAPTERS.get(choice)
     if not adapter:
         return None
-    if _ready_cache.get(choice) is False:
-        return None
     if _ready_cache.get(choice) is not True:
         return None
     return adapter
+
+
+async def resolve_adapter_live(preferred: str | None = None) -> AgentAdapter | None:
+    """Refresh sidecar readiness and resolve adapter (Web turn entry)."""
+    await refresh_provider_cache()
+    adapter = resolve_adapter(preferred)
+    if adapter:
+        return adapter
+    choice = (preferred or settings.agent_provider or "cursor_sdk").strip().lower()
+    if choice in ("engine", "none", "off") or choice not in _ADAPTERS:
+        return None
+    if _ready_cache.get(choice) is False:
+        return None
+    await refresh_provider_cache()
+    return resolve_adapter(preferred)
 
 
 def bridge_ready() -> bool:

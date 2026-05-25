@@ -1,4 +1,4 @@
-.PHONY: install api web mcp bridge dev dev-help stop
+.PHONY: install api web mcp bridge dev dev-help stop test
 
 PYTHON ?= python3.11
 WITH_ENV = bash scripts/with-env.sh
@@ -7,6 +7,7 @@ install:
 	cd apps/api && $(PYTHON) -m pip install -e .
 	cd apps/mcp-server && $(PYTHON) -m pip install -e .
 	cd apps/agent-bridge && npm install
+	cd apps/forge-runner && npm install
 	cd apps/web && npm install
 
 api:
@@ -54,3 +55,7 @@ stop:
 	@-lsof -ti :8787 | xargs kill -9 2>/dev/null && echo "  Agent bridge stopped" || true
 	@-lsof -ti :8642 | xargs kill 2>/dev/null; sleep 0.2
 	@-lsof -ti :8642 | xargs kill -9 2>/dev/null && echo "  Hermes gateway stopped" || true
+
+test:
+	cd apps/api && $(PYTHON) -m pytest -q
+	bash templates/scripts/validate-all.sh

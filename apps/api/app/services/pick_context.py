@@ -16,6 +16,7 @@ def format_pick_prompt(content: str, pick: dict | None) -> str:
     if not pick:
         return content
 
+    element = pick.get("element")
     label = pick.get("label") or ""
     x = pick.get("x", 0)
     y = pick.get("y", 0)
@@ -23,6 +24,16 @@ def format_pick_prompt(content: str, pick: dict | None) -> str:
     nx = pick.get("nx", 0)
     ny = pick.get("ny", 1)
     nz = pick.get("nz", 0)
+
+    if element:
+        return (
+            f"{content}\n\n"
+            "[用户选中的模型部件（3D 元素点选）]\n"
+            f"- 部件 ID：{element}\n"
+            f"- 显示名：{label or element}\n"
+            f"- 参考位置（mm）：x={x:.2f}, y={y:.2f}, z={z:.2f}\n"
+            "请只修改该部件相关的 OpenSCAD module/参数；SCAD 中查找 notion3d:part 注释或 color() 包裹的对应几何。"
+        )
 
     return (
         f"{content}\n\n"

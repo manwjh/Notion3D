@@ -84,6 +84,24 @@ class Notion3DClient:
             json_body={"scad_code": scad_code, "label": label, "source": source},
         )
 
+    def render_forge(
+        self,
+        project_id: str,
+        forge_code: str,
+        label: str = "MCP 渲染 ForgeCAD",
+        *,
+        source: str = "agent",
+        files: dict[str, str] | None = None,
+    ) -> dict:
+        body: dict = {"forge_code": forge_code, "label": label, "source": source}
+        if files:
+            body["files"] = files
+        return self.request(
+            "POST",
+            f"/api/projects/{project_id}/render-forge",
+            json_body=body,
+        )
+
     def get_job(self, project_id: str, job_id: str) -> dict:
         return self.request("GET", f"/api/projects/{project_id}/jobs/{job_id}")
 
@@ -92,6 +110,12 @@ class Notion3DClient:
 
     def list_versions(self, project_id: str) -> list[dict]:
         return self.request("GET", f"/api/projects/{project_id}/versions")
+
+    def get_forge_sources(self, project_id: str, version: int) -> dict:
+        return self.request(
+            "GET",
+            f"/api/projects/{project_id}/versions/{version}/forge-sources",
+        )
 
     def resume_stl(self, project_id: str, version: int) -> dict:
         return self.request("POST", f"/api/projects/{project_id}/versions/{version}/resume-stl")
@@ -174,6 +198,57 @@ class Notion3DClient:
             f"/api/projects/{project_id}/versions/{version}/save-template",
             json_body=body,
         )
+
+    def report_design_plan(
+        self,
+        project_id: str,
+        *,
+        task_class: str,
+        summary: str,
+        strategy: str,
+        turn_id: str | None = None,
+        template_id: str | None = None,
+        params: dict[str, float] | None = None,
+        modules: list[str] | None = None,
+        assumptions: list[str] | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {
+            "task_class": task_class,
+            "summary": summary,
+            "strategy": strategy,
+        }
+        if turn_id:
+            body["turn_id"] = turn_id
+        if template_id:
+            body["template_id"] = template_id
+        if params:
+            body["params"] = params
+        if modules:
+            body["modules"] = modules
+        if assumptions:
+            body["assumptions"] = assumptions
+        return self.request("POST", f"/api/projects/{project_id}/design/plan", json_body=body)
+
+    def report_design_review(
+        self,
+        project_id: str,
+        *,
+        status: str,
+        turn_id: str | None = None,
+        notes: list[str] | None = None,
+        retry_phase: str | None = None,
+    ) -> dict:
+        body: dict[str, Any] = {"status": status}
+        if turn_id:
+            body["turn_id"] = turn_id
+        if notes:
+            body["notes"] = notes
+        if retry_phase:
+            body["retry_phase"] = retry_phase
+        return self.request("POST", f"/api/projects/{project_id}/design/review", json_body=body)
+
+    def get_design_state(self, project_id: str) -> dict | None:
+        return self.request("GET", f"/api/projects/{project_id}/design/state")
 
 
 def format_json(data: Any) -> str:

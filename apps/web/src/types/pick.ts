@@ -6,9 +6,13 @@ export type ModelPick = {
   ny: number;
   nz: number;
   label?: string | null;
+  element?: string | null;
 };
 
 export function formatPickShort(pick: ModelPick): string {
+  if (pick.element) {
+    return pick.label ? `${pick.label} (${pick.element})` : pick.element;
+  }
   return pick.label ?? `(${pick.x.toFixed(1)}, ${pick.y.toFixed(1)}, ${pick.z.toFixed(1)})`;
 }
 

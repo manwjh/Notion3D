@@ -17,12 +17,37 @@ const stlItem = computed(() =>
 );
 
 const items = computed(() => {
-  const list = [];
+  const list: { label: string; href: string; external?: boolean; download?: boolean }[] = [];
   if (stlItem.value) list.push(stlItem.value);
-  if (props.version?.scad_url) {
-    list.push({ label: "源码 (高级)", href: props.version.scad_url, external: true });
+  if (props.version?.forge_url) {
+    list.push({
+      label: "源码 (ForgeCAD)",
+      href: props.version.forge_url,
+      external: true,
+    });
   }
-  return list as { label: string; href: string; external?: boolean; download?: boolean }[];
+  if (props.version?.forge_sources_url && (props.version.src_files?.length ?? 0) > 0) {
+    list.push({
+      label: "Forge 多文件包 (JSON)",
+      href: props.version.forge_sources_url,
+      external: true,
+    });
+  }
+  if (props.version?.scad_url) {
+    list.push({
+      label: "源码 (OpenSCAD legacy)",
+      href: props.version.scad_url,
+      external: true,
+    });
+  }
+  if (props.version?.parts_url) {
+    list.push({
+      label: "部件清单 (JSON)",
+      href: props.version.parts_url,
+      external: true,
+    });
+  }
+  return list;
 });
 
 function onDocClick(e: MouseEvent) {

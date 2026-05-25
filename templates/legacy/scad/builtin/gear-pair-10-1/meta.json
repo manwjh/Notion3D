@@ -1,0 +1,16 @@
+{
+  "id": "gear-pair-10-1",
+  "title": "10:1 啮合齿轮副",
+  "description": "Leemon Baird 公域渐开线齿廓（Thingiverse 5505 / pd-gears），按节圆中心距装配",
+  "tags": ["齿轮", "机械", "啮合"],
+  "category": "mechanical",
+  "license": "Public-Domain",
+  "source": "https://github.com/sadr0b0t/pd-gears (Leemon Baird, Thingiverse 5505)",
+  "params": [
+    { "name": "module_mm", "label": "模数", "default": 1.5, "unit": "mm" },
+    { "name": "teeth_1", "label": "主动轮齿数", "default": 10, "unit": "" },
+    { "name": "teeth_2", "label": "从动轮齿数", "default": 100, "unit": "" },
+    { "name": "thickness", "label": "齿宽", "default": 8, "unit": "mm" },
+    { "name": "hole_diameter", "label": "轴孔直径", "default": 5, "unit": "mm" }
+  ]
+}

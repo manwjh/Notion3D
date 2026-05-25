@@ -8,7 +8,10 @@ from app.services.agents.base import AgentAdapterError, AgentSessionHandle
 
 
 def test_turn_blocked_without_agent(client, project_id, monkeypatch):
-    monkeypatch.setattr("app.services.turn_service.resolve_adapter", lambda _: None)
+    async def _no_adapter(_preferred=None):
+        return None
+
+    monkeypatch.setattr("app.services.turn_service.resolve_adapter_live", _no_adapter)
 
     res = client.post(f"/api/projects/{project_id}/turn", json={"content": "20mm 立方体"})
     assert res.status_code == 200
@@ -27,7 +30,10 @@ def test_turn_routes_agent_when_adapter_ready(client, project_id, monkeypatch):
     adapter = MagicMock()
     adapter.start_turn = AsyncMock(return_value=handle)
 
-    monkeypatch.setattr("app.services.turn_service.resolve_adapter", lambda _: adapter)
+    async def _fake_adapter(_preferred=None):
+        return adapter
+
+    monkeypatch.setattr("app.services.turn_service.resolve_adapter_live", _fake_adapter)
     monkeypatch.setattr("app.services.turn_service.finish_agent_run", AsyncMock())
 
     res = client.post(f"/api/projects/{project_id}/turn", json={"content": "带铰链的盒子"})
@@ -48,7 +54,10 @@ def test_turn_blocked_on_agent_error(client, project_id, monkeypatch):
     adapter = MagicMock()
     adapter.start_turn = AsyncMock(side_effect=AgentAdapterError("bridge down"))
 
-    monkeypatch.setattr("app.services.turn_service.resolve_adapter", lambda _: adapter)
+    async def _fake_adapter(_preferred=None):
+        return adapter
+
+    monkeypatch.setattr("app.services.turn_service.resolve_adapter_live", _fake_adapter)
 
     res = client.post(f"/api/projects/{project_id}/turn", json={"content": "复杂结构"})
     assert res.status_code == 200
@@ -58,7 +67,16 @@ def test_turn_blocked_on_agent_error(client, project_id, monkeypatch):
 
 
 def test_project_state_requires_agent_mode(client, project_id, monkeypatch):
-    monkeypatch.setattr("app.services.capabilities.active_provider_id", lambda: None)
+    async def _mark_unready():
+        from app.services.agents.registry import _ready_cache
+
+        _ready_cache["cursor_sdk"] = False
+        _ready_cache["hermes"] = False
+
+    monkeypatch.setattr(
+        "app.services.capabilities.refresh_provider_cache",
+        _mark_unready,
+    )
 
     res = client.get(f"/api/projects/{project_id}/state")
     assert res.status_code == 200

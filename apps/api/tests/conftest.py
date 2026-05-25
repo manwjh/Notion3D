@@ -17,6 +17,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(settings, "data_dir", data_dir)
     repo_root = Path(__file__).resolve().parents[3]
     monkeypatch.setattr(settings, "templates_dir", repo_root / "templates")
+    monkeypatch.setattr(settings, "forge_runner_dir", repo_root / "apps" / "forge-runner")
 
     from app.main import app
 

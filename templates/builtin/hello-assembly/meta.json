@@ -1,0 +1,14 @@
+{
+  "id": "hello-assembly",
+  "title": "Hello Assembly（电动牙刷式多部件）",
+  "description": "ForgeCAD 多部件装配起点：外壳、电机、电池、PCB、充电线圈",
+  "tags": ["assembly", "demo", "forge"],
+  "category": "assembly",
+  "format": "forge",
+  "license": "MIT",
+  "params": [
+    { "name": "Body Width", "label": "Body Width", "default": 36, "unit": "mm" },
+    { "name": "Body Height", "label": "Body Height", "default": 90, "unit": "mm" },
+    { "name": "Shell Thickness", "label": "Shell Thickness", "default": 1.8, "unit": "mm" }
+  ]
+}

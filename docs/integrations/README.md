@@ -61,10 +61,11 @@ cd apps/mcp-server && pip install -e .
 ```
 1. notion3d_health()
 2. notion3d_create_project(name="…")     → project_id、web_url
-3. （Agent 写 OpenSCAD）
-4. notion3d_render_scad(project_id, scad) → job_id
+3. notion3d_report_design_plan(...)
+4. notion3d_render_forge(project_id, forge_code) → job_id
+   （legacy：notion3d_render_scad）
 5. notion3d_wait_job(project_id, job_id)
-6. 告诉用户打开 {web_url}
+6. notion3d_report_design_review(...)
 ```
 
 简单几何（立方体、球）：`notion3d_template`（Engine 规则模板，**无 LLM**）。
@@ -77,7 +78,8 @@ cd apps/mcp-server && pip install -e .
 
 | Tool | Engine 端点 |
 |------|-------------|
-| `notion3d_render_scad` | `POST .../render-scad` |
+| `notion3d_render_forge` | `POST .../render-forge` |
+| `notion3d_render_scad` | `POST .../render-scad`（legacy） |
 | `notion3d_template` | `POST .../jobs/template` |
 | `notion3d_create_project` | `POST .../projects` |
 | `notion3d_wait_job` | 轮询 jobs |
@@ -93,4 +95,5 @@ cd apps/mcp-server && pip install -e .
 | MCP 不可用 | `make api`；`notion3d_health` |
 | Web 无 Agent 项目 | 刷新；同一 `data/` |
 | Web 对话无响应 | `CURSOR_API_KEY` + bridge :8787 |
-| OpenSCAD 失败 | `openscad` 在 PATH |
+| ForgeCAD 失败 | `apps/forge-runner` 未 install | `cd apps/forge-runner && npm install` |
+| OpenSCAD legacy 失败 | `openscad` 不在 PATH | 仅 legacy 模板需要 |

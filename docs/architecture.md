@@ -1,6 +1,8 @@
 # Notion3D 架构
 
-Notion3D = **OpenSCAD 渲染引擎** + **Web 工作台**。不含 LLM。
+Notion3D = **ForgeCAD 装配渲染引擎** + **Web 工作台**。不含 LLM。
+
+> OpenSCAD 已降级为 legacy 路径，见 [docs/cad-backend-v2.md](cad-backend-v2.md)。
 
 ## 三层边界
 
@@ -27,18 +29,22 @@ Notion3D = **OpenSCAD 渲染引擎** + **Web 工作台**。不含 LLM。
 
 ## Design Turn（设计轮次）
 
-一次用户输入 = 一个 **Design Turn**，串联：
+一次用户输入 = 一个 **Design Turn**，分 **设计阶段** 与 **运行相位**：
 
 ```
-用户消息 → turn_id → Agent run → MCP render_scad → job_id → version
-                ↘ assistant 回复（agent_phase）
-                ↘ 渲染状态（render_phase）
+intake → plan → author → render → review → done
+         ↓ report_design_plan    ↓ render_scad    ↓ report_design_review
 ```
 
-- `meta.active_turn`：进行中的轮次（agent / render 双相位）
+- `design_phase`：intake | plan | author | render | review | done | blocked
+- `agent_phase` / `render_phase`：对话与 Job 状态
+- `plan` / `review`：Agent 经 MCP 写入的结构化产物
+
+详见 **[docs/design-pipeline.md](design-pipeline.md)**。
+
+- `meta.active_turn`：进行中的轮次
 - Job 带 `turn_id` + `source`（`agent` | `manual` | `template`）
-- Version meta 带 `turn_id` / `job_id`
-- 渲染失败写 **system** 消息，不再冒充 assistant
+- Version meta 带 `turn_id` / `job_id` / `validation_warnings`
 
 Web `/state` 返回 `active_turn`，Chat 用 `job_id` / `turn_id` 关联版本按钮。
 
@@ -51,9 +57,9 @@ Agent（自带 LLM）→ notion3d-mcp → Engine REST → data/projects/
                                               ↘ Web 预览（共享 data/）
 ```
 
-主路径：`notion3d_render_scad`（`source=agent`，绑定 active turn）→ `notion3d_wait_job`。
+主路径：`notion3d_render_forge`（`source=agent`，绑定 active turn）→ `notion3d_wait_job`。
 
-`notion3d_template` 仅 dev/极简 primitive，不作为正式建模路径。
+Legacy：`notion3d_render_scad`。`notion3d_template` 仅 dev/极简 primitive。
 
 ### B. Web 对话
 
@@ -68,7 +74,7 @@ Web → POST /api/projects/{id}/turn
 
 ### C. 手动模式（高级编辑）
 
-Web **高级编辑** → `POST /render-scad`（`source=manual`）→ 不绑定 turn、不经 Agent。
+Web **高级编辑** → `POST /render-forge` 或 legacy `/render-scad`（`source=manual`）。
 
 ## 进程（本地开发）
 
@@ -87,12 +93,13 @@ make dev AGENT=cursor_sdk   # API :8000 + bridge :8787 + Web :5173
 
 | 方法 | 路径 | 用途 |
 |------|------|------|
-| POST | `/api/projects/{id}/render-scad` | 提交 SCAD（`source`: agent/manual） |
+| POST | `/api/projects/{id}/render-forge` | 提交 ForgeCAD（主路径） |
+| POST | `/api/projects/{id}/render-scad` | Legacy OpenSCAD |
 | POST | `/api/projects/{id}/jobs/template` | 规则模板（dev only） |
 | GET | `/api/projects/{id}/jobs/{job_id}` | Job 状态 |
 | POST | `/api/projects/{id}/turn` | **Web 主入口**：创建 turn + 转发 Agent |
 | GET | `/api/templates` | 模板库列表 |
-| GET | `/api/templates/{id}` | 模板详情（含 SCAD） |
+| GET | `/api/templates/{id}` | 模板详情（含 forge_code / scad_code） |
 | POST | `/api/templates/{id}/apply` | 应用模板到项目 |
 | POST | `/api/projects/{id}/versions/{v}/save-template` | 另存为用户模板 |
 | GET | `/api/projects/{id}/state` | 快照（messages + active_turn + job + agent） |
@@ -101,7 +108,8 @@ make dev AGENT=cursor_sdk   # API :8000 + bridge :8787 + Web :5173
 
 | Tool | 调用的 Engine |
 |------|---------------|
-| `notion3d_render_scad` | `POST .../render-scad`（source=agent） |
+| `notion3d_render_forge` | `POST .../render-forge` |
+| `notion3d_render_scad` | `POST .../render-scad`（legacy） |
 | `notion3d_list_templates` | `GET /api/templates` |
 | `notion3d_apply_template` | `POST /api/templates/{id}/apply` |
 | `notion3d_save_template` | `POST .../versions/{v}/save-template` |
@@ -117,8 +125,10 @@ data/
     messages.json      # user / assistant / system；turn_id、job_id
     versions/{n}/
       meta.json        # turn_id、job_id、prompt
-      model.scad
+      model.forge.js   # 或 legacy model.scad
       model.stl
+      parts.json
+      parts/{id}.stl
   jobs/{id}.json       # turn_id、source
 ```
 

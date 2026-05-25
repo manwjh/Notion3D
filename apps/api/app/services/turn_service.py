@@ -14,7 +14,7 @@ from app.services.agents import (
     AgentSessionHandle,
     get_adapter,
     refresh_provider_cache,
-    resolve_adapter,
+    resolve_adapter_live,
 )
 
 logger = logging.getLogger(__name__)
@@ -28,8 +28,12 @@ BLOCKED_NO_AGENT = (
 def format_user_text(body: AgentTurnIn) -> str:
     user_text = body.content
     if body.pick:
-        label = body.pick.label or f"({body.pick.x:.1f}, {body.pick.y:.1f}, {body.pick.z:.1f})"
-        user_text = f"{body.content}\n\n📍 3D 点选：{label}"
+        if body.pick.element:
+            label = body.pick.label or body.pick.element
+            user_text = f"{body.content}\n\n🎯 选中部件：{label} ({body.pick.element})"
+        else:
+            label = body.pick.label or f"({body.pick.x:.1f}, {body.pick.y:.1f}, {body.pick.z:.1f})"
+            user_text = f"{body.content}\n\n📍 3D 点选：{label}"
     return user_text
 
 
@@ -103,7 +107,7 @@ async def handle_turn(
     await refresh_provider_cache()
 
     meta = storage.load_meta(project_id)
-    adapter = resolve_adapter(meta.get("agent_provider"))
+    adapter = await resolve_adapter_live(meta.get("agent_provider"))
     latest_version = meta.get("latest_version")
 
     if not adapter:
@@ -122,11 +126,17 @@ async def handle_turn(
         )
 
     try:
+        region = body.region
+        if not region and body.pick and body.pick.element:
+            label = body.pick.label or body.pick.element
+            region = f"{label} ({body.pick.element})"
+        elif not region and body.pick:
+            region = body.pick.label
         handle = await adapter.start_turn(
             project_id,
             user_text,
             session_id=meta.get("agent_session_id"),
-            region=body.region,
+            region=region,
             turn_id=turn_id,
             latest_version=latest_version,
         )

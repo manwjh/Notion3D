@@ -31,6 +31,7 @@ export type Job = {
   preview_ready?: boolean;
   stl_ready?: boolean;
   error?: string | null;
+  validation_warnings?: string[];
   web_url?: string | null;
   created_at: string;
   updated_at: string;
@@ -42,12 +43,26 @@ export type ModelVersion = {
   version: number;
   status: VersionStatus;
   stl_url: string | null;
+  parts_url: string | null;
+  forge_url: string | null;
   scad_url: string | null;
   preview_url: string | null;
+  cad_backend?: string | null;
   created_at: string;
   prompt: string | null;
   turn_id?: string | null;
   job_id?: string | null;
+  validation_warnings?: string[];
+  plan_summary?: string | null;
+  plan_strategy?: string | null;
+  plan_template_id?: string | null;
+  plan_assumptions?: string[];
+  plan_modules?: string[];
+  review_status?: string | null;
+  review_notes?: string[];
+  design_revision?: number | null;
+  src_files?: string[];
+  forge_sources_url?: string | null;
 };
 
 export type AgentProvider = {
@@ -63,7 +78,11 @@ export type WebChatMode = "agent" | "setup_required";
 
 export type Health = {
   status: string;
+  forgecad_available: boolean;
   openscad_available: boolean;
+  forge_preview_available?: boolean;
+  forge_preview_running?: boolean;
+  cad_backend?: string;
   web_base_url?: string;
   agent_provider?: string;
   agent_active?: string | null;
@@ -89,14 +108,32 @@ export type Turn = {
   assistant_message_id?: string | null;
 };
 
+export type DesignPhase =
+  | "intake"
+  | "plan"
+  | "author"
+  | "render"
+  | "review"
+  | "done"
+  | "blocked";
+
 export type DesignTurn = {
   id: string;
   agent_phase: "running" | "replied" | "failed";
   render_phase: "idle" | "running" | "done" | "failed";
+  design_phase?: DesignPhase;
   user_message_id: string;
   assistant_message_id?: string | null;
   job_id?: string | null;
   version?: number | null;
+  revision?: number;
+  plan_summary?: string | null;
+  plan_strategy?: string | null;
+  plan_template_id?: string | null;
+  plan_assumptions?: string[];
+  plan_modules?: string[];
+  review_status?: string | null;
+  review_notes?: string[];
 };
 
 export type AgentStatus = {
@@ -154,6 +191,23 @@ export const createProject = (name: string) =>
     body: JSON.stringify({ name }),
   });
 
+export const renderForge = (
+  projectId: string,
+  forgeCode: string,
+  label?: string,
+  source: "manual" | "agent" = "manual",
+  files?: Record<string, string>,
+) =>
+  request<Job>(`/api/projects/${projectId}/render-forge`, {
+    method: "POST",
+    body: JSON.stringify({
+      forge_code: forgeCode,
+      label: label ?? "ForgeCAD 建模",
+      source,
+      ...(files && Object.keys(files).length ? { files } : {}),
+    }),
+  });
+
 export const renderScad = (
   projectId: string,
   scadCode: string,
@@ -164,6 +218,20 @@ export const renderScad = (
     method: "POST",
     body: JSON.stringify({ scad_code: scadCode, label: label ?? "手动编辑", source }),
   });
+
+export type ForgePreviewResult = {
+  ready: boolean;
+  url: string | null;
+  embed_url?: string | null;
+  error?: string | null;
+  mode?: string | null;
+};
+
+export const startForgePreview = (projectId: string, version: number) =>
+  request<ForgePreviewResult>(
+    `/api/projects/${projectId}/versions/${version}/forge-preview`,
+    { method: "POST" },
+  );
 
 export const getProjectState = (projectId: string) =>
   request<ProjectState>(`/api/projects/${projectId}/state`);
@@ -176,6 +244,7 @@ export type ModelPick = {
   ny: number;
   nz: number;
   label?: string | null;
+  element?: string | null;
 };
 
 export const sendTurn = (

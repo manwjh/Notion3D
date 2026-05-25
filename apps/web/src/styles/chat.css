@@ -440,6 +440,16 @@
   border: 1px solid rgba(77, 132, 247, 0.3);
 }
 
+.chat-design-phase-badge {
+  font-size: 0.65rem;
+  padding: 0.12rem 0.4rem;
+  border-radius: 999px;
+  font-weight: 500;
+  color: #ffcc88;
+  background: rgba(255, 180, 80, 0.12);
+  border: 1px solid rgba(255, 180, 80, 0.35);
+}
+
 
 .chat-error-banner {
   margin: 0 1rem 0.45rem;

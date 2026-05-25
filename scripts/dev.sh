@@ -36,6 +36,7 @@ set +a
 export NOTION3D_AGENT_PROVIDER="$AGENT"
 export NOTION3D_REPO_ROOT="$ROOT"
 PYTHON="${PYTHON:-python3.11}"
+export NOTION3D_PYTHON="$PYTHON"
 
 port_in_use() {
   lsof -ti ":$1" >/dev/null 2>&1
@@ -49,6 +50,10 @@ preflight() {
     fi
     if [ ! -d "$ROOT/apps/agent-bridge/node_modules" ]; then
       echo "提示: 首次运行请执行 make install" >&2
+    fi
+    if ! "$PYTHON" -c "import notion3d_mcp" 2>/dev/null; then
+      echo "错误: 未安装 notion3d-mcp。请执行: cd apps/mcp-server && $PYTHON -m pip install -e ." >&2
+      exit 1
     fi
   fi
 
@@ -77,6 +82,23 @@ banner() {
   echo "Ctrl+C 停止全部；或另开终端 make stop"
 }
 
+wait_http() {
+  local url="$1"
+  local label="$2"
+  local max="${3:-45}"
+  local i=1
+  while [ "$i" -le "$max" ]; do
+    if curl -sf "$url" >/dev/null 2>&1; then
+      echo "  ✓ $label"
+      return 0
+    fi
+    sleep 1
+    i=$((i + 1))
+  done
+  echo "  ✗ $label 未在 ${max}s 内就绪: $url" >&2
+  return 1
+}
+
 start_hermes_gateway() {
   local port="${NOTION3D_HERMES_API_PORT:-8642}"
   if port_in_use "$port"; then
@@ -102,14 +124,17 @@ sleep 0.3
 trap 'kill 0' INT TERM
 
 if [ "$AGENT" = "cursor_sdk" ]; then
-  ( cd "$ROOT/apps/agent-bridge" && npm start ) &
+  ( cd "$ROOT/apps/agent-bridge" && NOTION3D_PYTHON="$PYTHON" npm start ) &
+  wait_http "http://127.0.0.1:${NOTION3D_AGENT_BRIDGE_PORT:-8787}/health" "Bridge :8787" 60 || true
 fi
 
 if [ "$AGENT" = "hermes" ]; then
   start_hermes_gateway
+  wait_http "${NOTION3D_HERMES_API_BASE:-http://127.0.0.1:8642}/health" "Hermes gateway" 60 || true
 fi
 
 ( cd "$ROOT/apps/api" && "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 ) &
+wait_http "http://127.0.0.1:8000/health" "API :8000" 45 || true
 ( cd "$ROOT/apps/web" && npm run dev ) &
 
 wait

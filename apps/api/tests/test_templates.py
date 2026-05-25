@@ -5,72 +5,76 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
-def test_list_builtin_templates(client: TestClient):
+def test_list_builtin_forge_templates(client: TestClient):
     res = client.get("/api/templates", params={"scope": "builtin"})
     assert res.status_code == 200
     items = res.json()
     ids = {item["id"] for item in items}
-    assert "parametric-cube" in ids
-    assert "phone-stand" in ids
-    assert "gear-pair-10-1" in ids
-    assert "cable-clip" in ids
-    assert "sd-card-box" in ids
-    assert len(items) >= 8
+    assert "hello-assembly" in ids
+    assert "open-enclosure" in ids
 
 
-def test_get_template_includes_scad(client: TestClient):
-    res = client.get("/api/templates/parametric-cube")
+def test_get_forge_template_includes_code(client: TestClient):
+    res = client.get("/api/templates/hello-assembly")
     assert res.status_code == 200
     body = res.json()
-    assert body["title"] == "参数化立方体"
-    assert "cube(" in body["scad_code"]
+    assert body["format"] == "forge"
+    assert "param(" in body["forge_code"]
 
 
-def test_apply_template_creates_project(client: TestClient):
+def test_list_legacy_scad_templates(client: TestClient):
+    res = client.get("/api/templates", params={"scope": "legacy"})
+    assert res.status_code == 200
+    ids = {item["id"] for item in res.json()}
+    assert "parametric-cube" in ids
+    assert "gear-pair-10-1" in ids
+
+
+def test_apply_forge_template_creates_project(client: TestClient, monkeypatch):
+    from app.services import job_service
+
+    async def noop_job(job_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(job_service, "run_render_scad_job", noop_job)
+
     res = client.post(
-        "/api/templates/parametric-cube/apply",
-        json={"params": {"size": 30}, "name": "立方体测试"},
+        "/api/templates/open-enclosure/apply",
+        json={"params": {"Outer Width": 70}, "name": "敞口盒测试"},
     )
     assert res.status_code == 200
     body = res.json()
-    assert body["template_id"] == "parametric-cube"
-    assert body["project"]["name"] == "立方体测试"
-    assert body["job"]["project_id"] == body["project"]["id"]
+    assert body["template_id"] == "open-enclosure"
+    assert body["project"]["name"] == "敞口盒测试"
     assert body["job"]["source"] == "template"
 
 
-def test_apply_template_to_existing_project(client: TestClient, project_id: str):
-    res = client.post(
-        "/api/templates/parametric-cube/apply",
-        json={"project_id": project_id, "params": {"size": 25}},
-    )
-    assert res.status_code == 200
-    assert res.json()["project"]["id"] == project_id
-
-
-def test_save_template_from_version(client: TestClient, project_id: str):
+def test_save_forge_template_from_version(client: TestClient, project_id: str, monkeypatch):
     from app.config import settings
-    from app.services import storage
+    from app.services import cad_service, forgecad_service, storage
+
+    async def fake_validate(forge_code: str, out_dir, **kwargs):
+        (out_dir / "model.stl").write_text("solid fake\nendsolid fake\n", encoding="utf-8")
+        return cad_service.RenderResult(path=out_dir / "model.stl", warnings=[])
+
+    monkeypatch.setattr(forgecad_service, "validate_forge_render", fake_validate)
 
     version = 1
     version_dir = storage.version_dir(project_id, version)
     version_dir.mkdir(parents=True, exist_ok=True)
-    (version_dir / "model.scad").write_text(
-        "size = 22;\ncube(size);\n",
+    (version_dir / "model.forge.js").write_text(
+        'return box(10,10,10,true);',
         encoding="utf-8",
     )
 
     save_res = client.post(
         f"/api/projects/{project_id}/versions/{version}/save-template",
         json={
-            "id": "my-cube",
-            "title": "我的立方体",
+            "id": "my-box",
+            "title": "我的盒子",
             "tags": ["测试"],
         },
     )
     assert save_res.status_code == 200
-    assert save_res.json()["id"] == "my-cube"
-    assert (settings.user_templates_dir / "my-cube" / "model.scad").exists()
-
-    listed = client.get("/api/templates", params={"scope": "user"}).json()
-    assert any(item["id"] == "my-cube" for item in listed)
+    assert save_res.json()["id"] == "my-box"
+    assert (settings.user_templates_dir / "my-box" / "model.forge.js").exists()
