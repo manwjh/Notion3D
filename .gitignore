@@ -6,6 +6,7 @@ __pycache__/
 .env
 data/projects/
 data/jobs/
+tmp/
 .DS_Store
 *.egg-info/
 *.tsbuildinfo

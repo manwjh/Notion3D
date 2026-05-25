@@ -17,7 +17,7 @@ Web 对话经 **Agent 适配层** 对接 Cursor SDK 或 Hermes Agent（Notion3D 
 
 | Skill | 阶段 |
 |-------|------|
-| `notion3d-openscad` | 总览 / orchestrator |
+| `notion3d-pipeline` | 总览 / orchestrator |
 | `notion3d-intake` | 需求澄清 |
 | `notion3d-plan` | 模板检索、plan |
 | `notion3d-forge-author` | 写 ForgeCAD |

@@ -54,7 +54,7 @@ function baseOptions(logicalId) {
     name: `Notion3D ${logicalId}`,
     model: { id: MODEL },
     instructions:
-      "You are the Notion3D design agent. Follow project Skills in order: " +
+      "You are the Notion3D design agent. Start from notion3d-pipeline, then follow Skills: " +
       "notion3d-intake → notion3d-plan → notion3d-forge-author → notion3d-mcp → notion3d-review. " +
       "Before render_forge: notion3d_report_design_plan. After wait_job: notion3d_report_design_review. " +
       "Default from_scratch or edit previous model.forge.js; list_templates only for demo templates.",

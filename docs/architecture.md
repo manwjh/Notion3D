@@ -9,7 +9,7 @@ Notion3D = **ForgeCAD 装配渲染引擎** + **Web 工作台**。不含 LLM。
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  Engine（apps/api）— 无 LLM                                  │
-│  项目 / Design Turn / Job / OpenSCAD 渲染 / 版本 / 持久化      │
+│  项目 / Design Turn / Job / ForgeCAD 渲染 / 版本 / 持久化    │
 └───────────────────────────┬─────────────────────────────────┘
                             │ REST
           ┌─────────────────┼─────────────────┐
@@ -21,9 +21,9 @@ Notion3D = **ForgeCAD 装配渲染引擎** + **Web 工作台**。不含 LLM。
 
 | 层 | 目录 | 职责 |
 |----|------|------|
-| **Engine** | `apps/api` | CRUD、Design Turn、Job 队列、`render-scad`、版本 |
+| **Engine** | `apps/api` | CRUD、Design Turn、Job 队列、`render-forge`、版本 |
 | **MCP** | `apps/mcp-server` | `notion3d_*` tools → HTTP 调 Engine |
-| **Templates** | `templates/builtin/` | 内置 SCAD 模板库（只读数据） |
+| **Templates** | `templates/builtin/` | Forge 演示模板（只读数据） |
 | **Adapter** | `apps/api/.../agents` + `apps/agent-bridge` | Web 对话；转发到外部 Agent |
 | **Web** | `apps/web` | 工作台 UI；不存 LLM Key |
 
@@ -33,7 +33,7 @@ Notion3D = **ForgeCAD 装配渲染引擎** + **Web 工作台**。不含 LLM。
 
 ```
 intake → plan → author → render → review → done
-         ↓ report_design_plan    ↓ render_scad    ↓ report_design_review
+         ↓ report_design_plan    ↓ render_forge    ↓ report_design_review
 ```
 
 - `design_phase`：intake | plan | author | render | review | done | blocked
@@ -109,12 +109,15 @@ make dev AGENT=cursor_sdk   # API :8000 + bridge :8787 + Web :5173
 | Tool | 调用的 Engine |
 |------|---------------|
 | `notion3d_render_forge` | `POST .../render-forge` |
+| `notion3d_get_forge_sources` | 读取版本主脚本 + `src/` 子文件 |
 | `notion3d_render_scad` | `POST .../render-scad`（legacy） |
 | `notion3d_list_templates` | `GET /api/templates` |
 | `notion3d_apply_template` | `POST /api/templates/{id}/apply` |
 | `notion3d_save_template` | `POST .../versions/{v}/save-template` |
 | `notion3d_template` | `POST .../jobs/template`（legacy） |
 | `notion3d_wait_job` | 轮询 `GET .../jobs/{id}` |
+| `notion3d_report_design_plan` | plan 阶段结构化产物 |
+| `notion3d_report_design_review` | review 阶段结构化产物 |
 
 ## 数据
 

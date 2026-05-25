@@ -18,17 +18,16 @@ flowchart TD
   V -->|retry author| A
 ```
 
-Legacy OpenSCAD：`notion3d-author` + `render_scad`（`templates/legacy/scad/`）。
+Legacy OpenSCAD：Engine API `render_scad` + `templates/legacy/scad/`（无 Agent Skill）。
 
 ## Skills 目录
 
 ```
 .cursor/skills/
-  notion3d-openscad/      # 总览
+  notion3d-pipeline/      # 总览
   notion3d-intake/
   notion3d-plan/
-  notion3d-forge-author/  # 主 author
-  notion3d-author/        # legacy SCAD only
+  notion3d-forge-author/
   notion3d-mcp/
   notion3d-review/
 ```

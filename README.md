@@ -101,8 +101,11 @@ docs/               架构、流水线、dev 模式
 
 ## 文档
 
+- [docs/README.md](docs/README.md) — 文档索引
 - [docs/architecture.md](docs/architecture.md) — 架构与边界
 - [docs/cad-backend-v2.md](docs/cad-backend-v2.md) — ForgeCAD 后端与产物
 - [docs/design-pipeline.md](docs/design-pipeline.md) — 分阶段设计流水线
 - [docs/dev-modes.md](docs/dev-modes.md) — 本地运行与自检
+- [docs/agents/README.md](docs/agents/README.md) — Web 对话 Agent 接入
+- [docs/integrations/README.md](docs/integrations/README.md) — 外部 Agent MCP 接入
 - [AGENTS.md](AGENTS.md) — Agent / Skills / MCP 速查

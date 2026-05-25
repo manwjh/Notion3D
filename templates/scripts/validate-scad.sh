@@ -2,7 +2,7 @@
 # Validate OpenSCAD syntax and manifold export (null STL).
 set -euo pipefail
 
-SCAD="${1:?Usage: validate.sh model.scad}"
+SCAD="${1:?Usage: validate-scad.sh model.scad}"
 OPENSCAD="${OPENSCAD:-openscad}"
 
 if ! command -v "$OPENSCAD" >/dev/null 2>&1; then

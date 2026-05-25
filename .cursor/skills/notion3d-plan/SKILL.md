@@ -56,4 +56,4 @@ Legacy SCAD：`scope=legacy`（齿轮等，非主路径）
 
 ## 完成后
 
-→ **notion3d-forge-author**（或 legacy 时 notion3d-author）
+→ **notion3d-forge-author**

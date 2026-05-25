@@ -8,10 +8,10 @@ globs:
 
 # Notion3D 项目约定
 
-- 产品定位：**OpenSCAD 建模工作台**（描述 → 建模 → 预览 → 导出 SCAD/STL）
+- 产品定位：**ForgeCAD 装配工作台**（描述 → 建模 → 预览 → 导出 STL / parts）
 - 标准架构：Engine `apps/api` + MCP `apps/mcp-server` + Web `apps/web` + `apps/agent-bridge`
 - 架构文档：[docs/architecture.md](../../docs/architecture.md)
-- **Agent 集成**：MCP（`notion3d_render_scad` 首选）；Web 对话 `POST .../turn` → Adapter（必须配置 Agent）
+- **Agent 集成**：MCP（`notion3d_render_forge` 首选）；Web 对话 `POST .../turn` → Adapter（必须配置 Agent）
 - 规则模板（MCP `notion3d_template`，非 Web）：`POST .../jobs/template`
 - 调试：`make dev AGENT=cursor_sdk` | `AGENT=hermes` | `AGENT=engine`
 - 设计流水线：[docs/design-pipeline.md](../../docs/design-pipeline.md)

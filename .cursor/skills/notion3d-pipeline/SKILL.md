@@ -1,5 +1,5 @@
 ---
-name: notion3d-openscad
+name: notion3d-pipeline
 description: >-
   Notion3D design pipeline orchestrator: multi-phase workflow intake → plan →
   author → render → review. Routes to notion3d-intake, notion3d-plan,
@@ -27,7 +27,7 @@ Notion3D = **ForgeCAD 装配建模** + **分阶段 Agent** + **Engine 渲染** +
 | [notion3d-mcp](../notion3d-mcp/SKILL.md) | MCP 工具与异步 render |
 | [notion3d-review](../notion3d-review/SKILL.md) | 验收、`report_design_review` |
 
-Legacy OpenSCAD：`templates/legacy/scad/`，仅 `notion3d_render_scad`。
+Legacy OpenSCAD 仅 Engine API（`templates/legacy/scad/`、`notion3d_render_scad`），Agent 新建模不走此路径。
 
 ## 附加资源
 

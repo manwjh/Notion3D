@@ -5,7 +5,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "$ROOT/.." && pwd)"
 FORGE_RUNNER="$REPO/apps/forge-runner"
-LEGACY_VALIDATE="${REPO}/.cursor/skills/notion3d-openscad/scripts/validate.sh"
+LEGACY_VALIDATE="${ROOT}/scripts/validate-scad.sh"
 
 failed=0
 passed=0
