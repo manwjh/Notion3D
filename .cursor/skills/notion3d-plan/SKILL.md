@@ -20,15 +20,9 @@ Design Turn 第二阶段：**决定怎么做，而不是怎么做形**。
 
 **不要**每个请求都 `list_templates`。内置模板库**仅演示**，当前阶段不扩展。
 
-仅在 `template_apply` 或需参考结构时：
+仅在 `template_apply` 或需参考结构时：`notion3d_get_template(id)`（hello-assembly / open-enclosure）
 
-```
-notion3d_get_template(id)   # hello-assembly / open-enclosure
-```
-
-Legacy SCAD：`scope=legacy`（齿轮等，非主路径）
-
-## strategy 说明
+## strategy
 
 | strategy | 何时用 |
 |----------|--------|
@@ -41,7 +35,6 @@ Legacy SCAD：`scope=legacy`（齿轮等，非主路径）
 
 - 无必要地检索/扩展模板库
 - plan 里写完整 forge 代码
-- 新模型走 `render_scad`（除非 legacy 模板）
 
 ## report_design_plan 示例
 

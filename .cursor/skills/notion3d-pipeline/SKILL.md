@@ -9,34 +9,21 @@ description: >-
 
 # Notion3D 设计流水线（总览）
 
-Notion3D = **ForgeCAD 装配建模** + **分阶段 Agent** + **Engine 渲染** + **模板库**。
-
 ```
-用户描述 → intake → plan → author(forge) → render → review → 完成
-              ↓ ForgeCAD: model.stl + parts.json
-              ↓ Templates: hello-assembly / open-enclosure
+用户描述 → intake → plan → author → render → review → 完成
 ```
 
-## 分阶段 Skills（按序加载）
+## Skills（按序）
 
 | Skill | 职责 |
 |-------|------|
 | [notion3d-intake](../notion3d-intake/SKILL.md) | 澄清需求、A/B/C 分类 |
-| [notion3d-plan](../notion3d-plan/SKILL.md) | 模板检索、`report_design_plan` |
-| [notion3d-forge-author](../notion3d-forge-author/SKILL.md) | 写/改 .forge.js |
-| [notion3d-mcp](../notion3d-mcp/SKILL.md) | MCP 工具与异步 render |
-| [notion3d-review](../notion3d-review/SKILL.md) | 验收、`report_design_review` |
+| [notion3d-plan](../notion3d-plan/SKILL.md) | `report_design_plan` |
+| [notion3d-forge-author](../notion3d-forge-author/SKILL.md) | 写/改 `.forge.js` |
+| [notion3d-mcp](../notion3d-mcp/SKILL.md) | `render_forge` / `wait_job` |
+| [notion3d-review](../notion3d-review/SKILL.md) | `report_design_review` |
 
-Legacy OpenSCAD 仅 Engine API（`templates/legacy/scad/`、`notion3d_render_scad`），Agent 新建模不走此路径。
+## 参考
 
-## 附加资源
-
-- [docs/cad-backend-v2.md](../../docs/cad-backend-v2.md) — ForgeCAD 后端
-- [docs/design-pipeline.md](../../docs/design-pipeline.md) — 架构说明
-
-## 本地调试
-
-```bash
-cd apps/forge-runner && npm install
-make dev AGENT=cursor_sdk
-```
+- [docs/design-pipeline.md](../../docs/design-pipeline.md)
+- [docs/cad-backend-v2.md](../../docs/cad-backend-v2.md)

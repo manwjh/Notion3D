@@ -37,7 +37,6 @@ Design Turn 第三阶段：**只执行 plan，写 ForgeCAD 脚本**。
 
 - 偏离 plan 的尺寸/部件清单
 - 在本阶段改 plan（应 review→retry→plan）
-- 使用 `notion3d_render_scad`（legacy）
 
 ## 完成后
 

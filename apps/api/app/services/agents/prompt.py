@@ -68,7 +68,6 @@ project_id="{project_id}"
 - 复杂装配：`importAssembly("src/foo.forge.js")` + render_forge 的 `files_json`
 - 外壳部件 name 含 Shell/外壳 → Web 可半透明预览
 - Web「Forge 实时」= ForgeCAD Studio 内嵌，可调 param 即时看 3D
-- 禁止 `notion3d_render_scad`（legacy OpenSCAD 仅 legacy 模板）
 
 ## 回复约束
 

@@ -157,7 +157,7 @@ def set_design_review(
             )
             raise DesignTurnError(
                 f"已达最大设计迭代次数（{MAX_DESIGN_REVISION}），"
-                "请接受当前方案、手动编辑 OpenSCAD，或重新描述需求"
+                "请接受当前方案、手动编辑源码，或重新描述需求"
             )
         next_phase = target
         revision = current_revision + 1
@@ -258,12 +258,12 @@ def _append_revision_limit_message(
     if blocked:
         content = (
             f"设计迭代上限：已 retry {revision} 次，无法继续自动迭代。"
-            "请接受当前方案、使用「编辑 OpenSCAD」手动修改，或重新描述需求。"
+            "请接受当前方案、使用左栏「代码」手动修改，或重新描述需求。"
         )
     else:
         content = (
             f"最后一次自动迭代（第 {revision}/{MAX_DESIGN_REVISION} 次 retry）。"
-            "若仍不满意，建议改述需求或手动编辑 OpenSCAD。"
+            "若仍不满意，建议改述需求或手动编辑源码。"
         )
     storage.append_message(
         project_id,

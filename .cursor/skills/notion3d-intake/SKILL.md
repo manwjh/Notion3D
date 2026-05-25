@@ -33,7 +33,7 @@ Design Turn 第一阶段：**理解能否做、缺什么信息**。
 - 用户闲聊 / 问怎么用 → `strategy=chat_only`，不进入 author
 - 用户只改参数且已有 vN → 可跳过深 intake，直接 plan(template_edit)
 - 缺宽度/高度/用途时 **先问再 plan**，不要猜尺寸
-- 本阶段 **不要** 写 SCAD，**不要** `render_scad`
+- 本阶段 **不要** 写 ForgeCAD，**不要** `render_forge`
 
 ## 完成后
 

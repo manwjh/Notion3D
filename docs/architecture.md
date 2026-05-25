@@ -57,9 +57,9 @@ Agent（自带 LLM）→ notion3d-mcp → Engine REST → data/projects/
                                               ↘ Web 预览（共享 data/）
 ```
 
-主路径：`notion3d_render_forge`（`source=agent`，绑定 active turn）→ `notion3d_wait_job`。
+主路径：`notion3d_render_forge` → `notion3d_wait_job`。
 
-Legacy：`notion3d_render_scad`。`notion3d_template` 仅 dev/极简 primitive。
+Legacy API 见下方 [Legacy（Engine 保留）](#legacy-engine-保留)；Agent 不使用。
 
 ### B. Web 对话
 
@@ -94,7 +94,6 @@ make dev AGENT=cursor_sdk   # API :8000 + bridge :8787 + Web :5173
 | 方法 | 路径 | 用途 |
 |------|------|------|
 | POST | `/api/projects/{id}/render-forge` | 提交 ForgeCAD（主路径） |
-| POST | `/api/projects/{id}/render-scad` | Legacy OpenSCAD |
 | POST | `/api/projects/{id}/jobs/template` | 规则模板（dev only） |
 | GET | `/api/projects/{id}/jobs/{job_id}` | Job 状态 |
 | POST | `/api/projects/{id}/turn` | **Web 主入口**：创建 turn + 转发 Agent |
@@ -116,8 +115,19 @@ make dev AGENT=cursor_sdk   # API :8000 + bridge :8787 + Web :5173
 | `notion3d_save_template` | `POST .../versions/{v}/save-template` |
 | `notion3d_template` | `POST .../jobs/template`（legacy） |
 | `notion3d_wait_job` | 轮询 `GET .../jobs/{id}` |
-| `notion3d_report_design_plan` | plan 阶段结构化产物 |
-| `notion3d_report_design_review` | review 阶段结构化产物 |
+| `notion3d_report_design_plan` | plan 阶段 |
+| `notion3d_report_design_review` | review 阶段 |
+
+## Legacy（Engine 保留）
+
+OpenSCAD 兼容路径，**Agent 新建模不使用**。
+
+| 方法 / Tool | 说明 |
+|-------------|------|
+| `POST .../render-scad` | 旧版 SCAD 渲染 |
+| `notion3d_render_scad` | MCP legacy |
+| `notion3d_template` | 规则 NL→SCAD（dev/test） |
+| `templates/legacy/scad/` | 遗留模板库 |
 
 ## 数据
 

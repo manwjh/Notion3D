@@ -8,7 +8,7 @@ def format_region_prompt(content: str, region: str | None) -> str:
         f"{content}\n\n"
         "[用户指定的修改部位]\n"
         f"- 部位：{region.strip()}\n"
-        "请只修改该部位相关的 OpenSCAD 参数或几何，不要改动其他部分。"
+        "请只修改该部位相关的 ForgeCAD 参数或几何，不要改动其他部分。"
     )
 
 
@@ -32,7 +32,7 @@ def format_pick_prompt(content: str, pick: dict | None) -> str:
             f"- 部件 ID：{element}\n"
             f"- 显示名：{label or element}\n"
             f"- 参考位置（mm）：x={x:.2f}, y={y:.2f}, z={z:.2f}\n"
-            "请只修改该部件相关的 OpenSCAD module/参数；SCAD 中查找 notion3d:part 注释或 color() 包裹的对应几何。"
+            "请只修改该部件：在 .forge.js 中定位同名 `name` 或对应 `importAssembly` 子文件。"
         )
 
     return (
@@ -41,7 +41,7 @@ def format_pick_prompt(content: str, pick: dict | None) -> str:
         f"- 区域：{label}\n"
         f"- 坐标（模型居中坐标系，mm，Y 轴向上）：x={x:.2f}, y={y:.2f}, z={z:.2f}\n"
         f"- 表面法向：nx={nx:.3f}, ny={ny:.3f}, nz={nz:.3f}\n"
-        "请针对该位置附近的几何进行修改；若 OpenSCAD 有对应 module/参数，优先调整相关部分。"
+        "请针对该位置附近的几何进行修改；优先调整相关 `param()` 或部件 shape。"
     )
 
 

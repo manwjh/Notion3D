@@ -11,14 +11,12 @@ from notion3d_mcp.links import resolve_web_base_from_health
 mcp = FastMCP(
     "notion3d",
     instructions=(
-        "Notion3D ForgeCAD engine (no LLM). Follow the multi-phase design Skills: "
+        "Notion3D ForgeCAD engine (no LLM). Start from notion3d-pipeline Skill, then: "
         "notion3d-intake → notion3d-plan → notion3d-forge-author → notion3d-mcp → notion3d-review. "
-        "Before authoring: notion3d_report_design_plan (from_scratch or version edit; "
-        "list_templates only for explicit demo). "
+        "Before authoring: notion3d_report_design_plan. "
+        "Model with notion3d_render_forge + notion3d_wait_job. "
         "After render: notion3d_report_design_review. "
-        "Use notion3d_render_forge for modeling (binds active design turn). "
-        "Legacy OpenSCAD: notion3d_render_scad only for templates/legacy scope. "
-        "Jobs are async: notion3d_wait_job. User is in Web workbench — do not ask for web_url."
+        "User is in Web workbench — do not ask for web_url."
     ),
 )
 
@@ -74,7 +72,7 @@ def notion3d_template(
     pick_z: float | None = None,
     pick_label: str | None = None,
 ) -> str:
-    """Legacy rule-based NL→SCAD (no LLM). Dev/test only — prefer notion3d_render_scad."""
+    """Dev-only rule-based NL→SCAD (no LLM). Do not use for Agent modeling."""
     pick = None
     if pick_x is not None and pick_y is not None and pick_z is not None:
         pick = {
@@ -135,13 +133,13 @@ def notion3d_list_templates(
     category: str | None = None,
     scope: str = "all",
 ) -> str:
-    """Browse SCAD template library (builtin + user-saved). Filter by tag or category."""
+    """Browse template library. Demo use only — default modeling is from_scratch."""
     return _out(client.list_templates(tag=tag, category=category, scope=scope))
 
 
 @mcp.tool()
 def notion3d_get_template(template_id: str) -> str:
-    """Get template metadata and full SCAD source by id."""
+    """Get template metadata and forge_code / scad_code by id."""
     return _out(client.get_template(template_id))
 
 
@@ -265,7 +263,7 @@ def notion3d_report_design_plan(
     modules_json: str | None = None,
     assumptions_json: str | None = None,
 ) -> str:
-    """Record modeling plan before authoring SCAD. Advances turn to author (or blocked for class C).
+    """Record modeling plan before authoring ForgeCAD. Advances turn to author (or blocked for class C).
 
     task_class: A | B | C
     strategy: template_apply | template_edit | from_scratch | chat_only
