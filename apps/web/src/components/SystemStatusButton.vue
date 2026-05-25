@@ -51,13 +51,6 @@ function modeLabel(health: Health | null) {
             <span>{{ health.forgecad_available ? "就绪" : "未安装 — cd apps/forge-runner && npm install" }}</span>
           </div>
         </li>
-        <li v-if="health.openscad_available" class="ok">
-          <span class="sys-status-item-dot" aria-hidden="true" />
-          <div>
-            <strong>OpenSCAD (legacy)</strong>
-            <span>就绪</span>
-          </div>
-        </li>
         <li :class="health.web_chat_mode === 'agent' ? 'ok' : 'warn'">
           <span class="sys-status-item-dot" aria-hidden="true" />
           <div>

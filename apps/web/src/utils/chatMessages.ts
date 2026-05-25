@@ -7,7 +7,7 @@ const LEGACY_SYSTEM_REPLIES = [
 const LEGACY_SYSTEM_REPLY_RES = [
   /^初稿 v\d+ 好了，左侧可以预览/,
   /^初稿 v\d+ 好了，右侧可以预览/,
-  /^已从 (SCAD|ForgeCAD) 渲染版本 v\d+/,
+  /^已从 ForgeCAD 渲染版本 v\d+/,
   /^Cursor SDK Agent 已完成/,
   /^Hermes Agent 已完成/,
 ];

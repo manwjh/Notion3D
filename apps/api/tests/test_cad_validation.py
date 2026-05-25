@@ -6,7 +6,6 @@ import struct
 from pathlib import Path
 
 from app.services.cad_validation import (
-    analyze_scad_warnings,
     analyze_stl_warnings,
     count_stl_triangles,
     parse_stl_bounds,
@@ -22,23 +21,6 @@ def _write_binary_stl(path: Path, triangles: list[tuple[tuple[float, float, floa
             body.extend(struct.pack("<3f", x, y, z))
         body.extend(struct.pack("<H", 0))
     path.write_bytes(header + struct.pack("<I", len(triangles)) + body)
-
-
-def test_analyze_scad_warns_thin_wall():
-    scad = "wall = 0.8;\ncube(10);\n"
-    warnings = analyze_scad_warnings(scad).warnings
-    assert any("0.8" in w and "1.2" in w for w in warnings)
-
-
-def test_analyze_scad_warns_below_recommended_wall():
-    scad = "wall = 1.4;\ncube(10);\n"
-    warnings = analyze_scad_warnings(scad).warnings
-    assert any("1.4" in w and "1.6" in w for w in warnings)
-
-
-def test_analyze_scad_ok_wall():
-    scad = "wall = 2.0;\ncube(10);\n"
-    assert analyze_scad_warnings(scad).warnings == []
 
 
 def test_parse_stl_bounds_binary(tmp_path: Path):

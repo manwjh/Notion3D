@@ -1,11 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import { renderForge, renderScad, type Job } from "../api/client";
+import { renderForge, type Job } from "../api/client";
 import type { JobPhase } from "../types/generation";
-import {
-  parseModelParams,
-  type SourceBackend,
-} from "../utils/modelParams";
+import { parseModelParams } from "../utils/modelParams";
 import ParamPanel from "./ParamPanel.vue";
 
 const MAIN_FILE = "__main__";
@@ -14,7 +11,6 @@ const props = defineProps<{
   projectId: string | null;
   sourceUrl: string | null;
   forgeSourcesUrl?: string | null;
-  sourceBackend: SourceBackend;
   version: number | null;
   generating?: boolean;
   generationPhase?: JobPhase;
@@ -30,8 +26,6 @@ const forgeFiles = ref<Record<string, string>>({});
 const busy = ref(false);
 const status = ref<string | null>(null);
 const dirty = ref(false);
-
-const isForge = computed(() => props.sourceBackend === "forge");
 
 const code = computed({
   get() {
@@ -57,24 +51,16 @@ function fileLabel(key: string) {
   return key === MAIN_FILE ? "model.forge.js" : `src/${key}`;
 }
 
-const GENERATING_PLACEHOLDER = computed(() =>
-  isForge.value
-    ? `// 正在生成 ForgeCAD 脚本…\n// 完成后可在此查看与编辑`
-    : `// 正在生成 OpenSCAD…\n// 完成后可在此查看与编辑`,
+const GENERATING_PLACEHOLDER = `// 正在生成 ForgeCAD 脚本…\n// 完成后可在此查看与编辑`;
+
+const hasParams = computed(
+  () => activeFile.value === MAIN_FILE && parseModelParams(code.value).length > 0,
 );
 
-const hasParams = computed(() =>
-  activeFile.value === MAIN_FILE && parseModelParams(code.value, props.sourceBackend).length > 0,
-);
-
-const codePlaceholder = computed(() =>
-  isForge.value
-    ? "// 在此编辑 ForgeCAD (.forge.js) 源码…"
-    : "// 在此编辑 OpenSCAD 源码（legacy）…",
-);
+const codePlaceholder = "// 在此编辑 ForgeCAD (.forge.js) 源码…";
 
 watch(
-  () => [props.forgeSourcesUrl, props.sourceUrl, props.version, props.sourceBackend] as const,
+  () => [props.forgeSourcesUrl, props.sourceUrl, props.version] as const,
   ([sourcesUrl, url, ver], _, onCleanup) => {
     if ((!sourcesUrl && !url) || ver == null) {
       forgeMain.value = "";
@@ -86,7 +72,7 @@ watch(
     let cancelled = false;
     const load = async () => {
       try {
-        if (isForge.value && sourcesUrl) {
+        if (sourcesUrl) {
           const res = await fetch(sourcesUrl);
           if (!res.ok) throw new Error("无法加载 Forge 源码包");
           const data = (await res.json()) as { forge_code: string; files?: Record<string, string> };
@@ -141,9 +127,7 @@ async function handleApply() {
   try {
     const label = dirty.value ? "调整参数" : "重新生成";
     const files = hasMultiFile.value ? forgeFiles.value : undefined;
-    const job = isForge.value
-      ? await renderForge(props.projectId, forgeMain.value, label, "manual", files)
-      : await renderScad(props.projectId, forgeMain.value, label);
+    const job = await renderForge(props.projectId, forgeMain.value, label, "manual", files);
     await props.trackJob(job, label);
     status.value = "已提交";
     dirty.value = false;
@@ -206,7 +190,6 @@ async function handleApply() {
         <template v-else-if="hasParams">
           <ParamPanel
             :code="code"
-            :backend="sourceBackend"
             :disabled="busy || (generating && !forgeMain)"
             class="param-panel--embedded"
             @change="onCodeChange"
@@ -229,7 +212,7 @@ async function handleApply() {
             </button>
           </div>
           <textarea
-            class="scad-editor scad-editor--embedded"
+            class="forge-editor forge-editor--embedded"
             :value="generating && !forgeMain ? GENERATING_PLACEHOLDER : code"
             :placeholder="codePlaceholder"
             spellcheck="false"
@@ -266,7 +249,6 @@ async function handleApply() {
       <template v-else-if="hasParams">
         <ParamPanel
           :code="code"
-          :backend="sourceBackend"
           :disabled="busy || (generating && !forgeMain)"
           @change="onCodeChange"
         />
@@ -293,8 +275,8 @@ async function handleApply() {
         </button>
       </div>
       <textarea
-        class="scad-editor"
-        :class="{ 'scad-editor--waiting': generating && !forgeMain }"
+        class="forge-editor"
+        :class="{ 'forge-editor--waiting': generating && !forgeMain }"
         :value="generating && !forgeMain ? GENERATING_PLACEHOLDER : code"
         :placeholder="codePlaceholder"
         spellcheck="false"
@@ -302,7 +284,7 @@ async function handleApply() {
         :readonly="generating && !forgeMain"
         @input="onEditorInput"
       />
-      <p v-if="generating && !forgeMain && generationPhase" class="scad-waiting-hint">
+      <p v-if="generating && !forgeMain && generationPhase" class="forge-waiting-hint">
         {{
           generationPhase === "rendering"
             ? "3D 模型即将加载…"
@@ -360,7 +342,7 @@ async function handleApply() {
   padding: 0.25rem 0;
 }
 
-.scad-editor--embedded {
+.forge-editor--embedded {
   min-height: 100px;
   max-height: 160px;
   margin-top: 0.35rem;

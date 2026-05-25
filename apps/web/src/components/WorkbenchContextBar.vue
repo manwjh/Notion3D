@@ -14,14 +14,12 @@ const props = withDefaults(
     canPick: boolean;
     viewingLatest: boolean;
     hasExport: boolean;
-    sourceBackend?: "forge" | "scad";
     viewMode?: "assembly" | "forge";
     canForgePreview?: boolean;
   }>(),
   {
     viewMode: "assembly",
     canForgePreview: false,
-    sourceBackend: "forge",
     projectName: null,
   },
 );
@@ -36,7 +34,7 @@ const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
 
 const showViewToggle = computed(
-  () => props.canForgePreview && props.sourceBackend !== "scad" && Boolean(props.activeVersion?.forge_url),
+  () => props.canForgePreview && Boolean(props.activeVersion?.forge_url),
 );
 
 function onDocClick(e: MouseEvent) {

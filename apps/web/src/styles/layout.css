@@ -170,7 +170,7 @@
   background: #263042;
 }
 
-.scad-editor {
+.forge-editor {
   flex: 1;
   min-height: 0;
   resize: none;
@@ -183,7 +183,7 @@
   padding: 0.55rem 0.65rem;
 }
 
-.scad-editor:focus {
+.forge-editor:focus {
   outline: none;
 }
 

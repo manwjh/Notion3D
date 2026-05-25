@@ -326,12 +326,12 @@
   color: #6b7280;
 }
 
-.scad-editor--waiting {
+.forge-editor--waiting {
   color: #6b7280 !important;
   font-style: italic;
 }
 
-.scad-waiting-hint {
+.forge-waiting-hint {
   margin: 0;
   padding: 0.35rem 0.65rem 0.55rem;
   font-size: 0.72rem;

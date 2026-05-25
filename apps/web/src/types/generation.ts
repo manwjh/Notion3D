@@ -28,7 +28,6 @@ type JobLike = {
 
 const PHASE_MAP: Record<string, JobPhase> = {
   pending: "generating",
-  scad: "generating",
   preview: "rendering",
   stl: "rendering",
   done: "done",

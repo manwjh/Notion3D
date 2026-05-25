@@ -59,7 +59,7 @@ def test_download_src_file(client: TestClient, project_id: str):
 
 def test_read_src_rejects_traversal(project_id: str):
     from app.services import forgecad_service
-    from app.services.cad_service import CadError
+    from app.services.cad_types import CadError
 
     version_dir = storage.version_dir(project_id, 1)
     (version_dir / "model.forge.js").write_text("return box(1,1,1);", encoding="utf-8")

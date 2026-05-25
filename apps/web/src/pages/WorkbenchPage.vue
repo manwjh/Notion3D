@@ -29,7 +29,6 @@ import { useActiveJob } from "../composables/useActiveJob";
 import { useProjectRoute } from "../composables/useProjectRoute";
 import { phaseLabel } from "../types/generation";
 import { mergeDesignContext } from "../utils/designContext";
-import { backendFromCadBackend, type SourceBackend } from "../utils/modelParams";
 import type { ModelPick } from "../types/pick";
 
 const projects = ref<Project[]>([]);
@@ -317,30 +316,18 @@ const displayStlUrl = computed(() => {
   return active.value?.stl_url ? `${active.value.stl_url}?v=${active.value.version}` : null;
 });
 
-const sourceBackend = computed((): SourceBackend => {
-  const backend = active.value?.cad_backend;
-  if (backend) return backendFromCadBackend(backend);
-  if (active.value?.forge_url) return "forge";
-  if (active.value?.scad_url) return "scad";
-  return "forge";
-});
-
 const sourceUrl = computed(() => {
   const ver = jobBusy.value && followLatestVersion.value ? jobVersion.value : active.value?.version;
   if (!projectId.value || ver == null) return null;
 
   const base = `/api/projects/${projectId.value}/versions/${ver}`;
-  const backend = sourceBackend.value;
 
   if (jobBusy.value && followLatestVersion.value) {
-    return backend === "forge" ? `${base}/model.forge.js?v=${ver}` : `${base}/model.scad?v=${ver}`;
+    return `${base}/model.forge.js?v=${ver}`;
   }
 
-  if (backend === "forge" && active.value?.forge_url) {
+  if (active.value?.forge_url) {
     return `${active.value.forge_url}?v=${active.value.version}`;
-  }
-  if (active.value?.scad_url) {
-    return `${active.value.scad_url}?v=${active.value.version}`;
   }
   return null;
 });
@@ -381,7 +368,6 @@ const canPick = computed(() => Boolean(displayStlUrl.value || displayPartsUrl.va
 const canForgePreview = computed(
   () =>
     Boolean(sysHealth.value?.forge_preview_available ?? sysHealth.value?.forgecad_available) &&
-    sourceBackend.value === "forge" &&
     Boolean(active.value?.forge_url),
 );
 
@@ -556,7 +542,6 @@ const editorVersion = computed(() =>
       :can-pick="canPick"
       :viewing-latest="viewingLatest"
       :has-export="hasExportable"
-      :source-backend="sourceBackend"
       :view-mode="previewViewMode"
       :can-forge-preview="canForgePreview"
       @resume-stl="handleResumeStl"
@@ -584,7 +569,6 @@ const editorVersion = computed(() =>
           :pick="modelPick"
           :src-files="active?.src_files"
           :has-forge-source="Boolean(active?.forge_url)"
-          :source-backend="sourceBackend"
           :project-id="projectId"
           :source-url="sourceUrl"
           :forge-sources-url="forgeSourcesUrl"
@@ -678,7 +662,6 @@ const editorVersion = computed(() =>
 
     <WorkbenchStatusBar
       :health="sysHealth"
-      :source-backend="sourceBackend"
       :validation-warnings="activeValidationWarnings"
       :agent-ready="agentReady"
     />

@@ -71,7 +71,6 @@ class ModelVersionOut(BaseModel):
     stl_url: str | None = None
     parts_url: str | None = None
     forge_url: str | None = None
-    scad_url: str | None = None
     preview_url: str | None = None
     cad_backend: str | None = "forgecad"
     created_at: datetime
@@ -120,12 +119,6 @@ class ModelPickIn(BaseModel):
 
 class AgentTurnIn(BaseModel):
     content: str = Field(min_length=1, max_length=8000)
-    pick: ModelPickIn | None = None
-    region: str | None = Field(default=None, max_length=64)
-
-
-class TemplateJobIn(BaseModel):
-    prompt: str = Field(min_length=1, max_length=8000)
     pick: ModelPickIn | None = None
     region: str | None = Field(default=None, max_length=64)
 
@@ -230,12 +223,6 @@ class DesignArtifactOut(BaseModel):
     revision: int = 0
 
 
-class ScadRenderIn(BaseModel):
-    scad_code: str = Field(min_length=1, max_length=200_000)
-    label: str = Field(default="手动编辑 SCAD", max_length=256)
-    source: JobSource = Field(default=JobSource.manual)
-
-
 class ForgeRenderIn(BaseModel):
     forge_code: str = Field(min_length=1, max_length=400_000)
     label: str = Field(default="ForgeCAD 建模", max_length=256)
@@ -284,7 +271,6 @@ class ProjectStateOut(BaseModel):
 class HealthOut(BaseModel):
     status: str
     forgecad_available: bool = False
-    openscad_available: bool
     cad_backend: str = "forgecad"
     web_base_url: str = "http://localhost:5173"
     agent_provider: str = "cursor_sdk"
@@ -317,7 +303,6 @@ class TemplateOut(BaseModel):
 
 
 class TemplateDetailOut(TemplateOut):
-    scad_code: str | None = None
     forge_code: str | None = None
     format: str = "forge"
 

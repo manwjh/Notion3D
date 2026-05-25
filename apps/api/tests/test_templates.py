@@ -22,21 +22,13 @@ def test_get_forge_template_includes_code(client: TestClient):
     assert "param(" in body["forge_code"]
 
 
-def test_list_legacy_scad_templates(client: TestClient):
-    res = client.get("/api/templates", params={"scope": "legacy"})
-    assert res.status_code == 200
-    ids = {item["id"] for item in res.json()}
-    assert "parametric-cube" in ids
-    assert "gear-pair-10-1" in ids
-
-
 def test_apply_forge_template_creates_project(client: TestClient, monkeypatch):
     from app.services import job_service
 
     async def noop_job(job_id: str) -> None:
         return None
 
-    monkeypatch.setattr(job_service, "run_render_scad_job", noop_job)
+    monkeypatch.setattr(job_service, "run_render_job", noop_job)
 
     res = client.post(
         "/api/templates/open-enclosure/apply",
@@ -51,11 +43,12 @@ def test_apply_forge_template_creates_project(client: TestClient, monkeypatch):
 
 def test_save_forge_template_from_version(client: TestClient, project_id: str, monkeypatch):
     from app.config import settings
-    from app.services import cad_service, forgecad_service, storage
+    from app.services import forgecad_service, storage
+    from app.services.cad_types import RenderResult
 
     async def fake_validate(forge_code: str, out_dir, **kwargs):
         (out_dir / "model.stl").write_text("solid fake\nendsolid fake\n", encoding="utf-8")
-        return cad_service.RenderResult(path=out_dir / "model.stl", warnings=[])
+        return RenderResult(path=out_dir / "model.stl", warnings=[])
 
     monkeypatch.setattr(forgecad_service, "validate_forge_render", fake_validate)
 

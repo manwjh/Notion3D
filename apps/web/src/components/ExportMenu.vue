@@ -33,13 +33,6 @@ const items = computed(() => {
       external: true,
     });
   }
-  if (props.version?.scad_url) {
-    list.push({
-      label: "源码 (OpenSCAD legacy)",
-      href: props.version.scad_url,
-      external: true,
-    });
-  }
   if (props.version?.parts_url) {
     list.push({
       label: "部件清单 (JSON)",

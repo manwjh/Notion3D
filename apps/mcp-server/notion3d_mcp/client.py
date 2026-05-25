@@ -53,37 +53,6 @@ class Notion3DClient:
     def create_project(self, name: str = "Agent 项目") -> dict:
         return self.request("POST", "/api/projects", json_body={"name": name})
 
-    def list_messages(self, project_id: str) -> list[dict]:
-        return self.request("GET", f"/api/projects/{project_id}/messages")
-
-    def template(
-        self,
-        project_id: str,
-        prompt: str,
-        pick: dict | None = None,
-        region: str | None = None,
-    ) -> dict:
-        body: dict[str, Any] = {"prompt": prompt}
-        if pick:
-            body["pick"] = pick
-        if region:
-            body["region"] = region
-        return self.request("POST", f"/api/projects/{project_id}/jobs/template", json_body=body)
-
-    def render_scad(
-        self,
-        project_id: str,
-        scad_code: str,
-        label: str = "MCP 渲染 SCAD",
-        *,
-        source: str = "agent",
-    ) -> dict:
-        return self.request(
-            "POST",
-            f"/api/projects/{project_id}/render-scad",
-            json_body={"scad_code": scad_code, "label": label, "source": source},
-        )
-
     def render_forge(
         self,
         project_id: str,
@@ -104,6 +73,9 @@ class Notion3DClient:
 
     def get_job(self, project_id: str, job_id: str) -> dict:
         return self.request("GET", f"/api/projects/{project_id}/jobs/{job_id}")
+
+    def list_messages(self, project_id: str) -> list[dict]:
+        return self.request("GET", f"/api/projects/{project_id}/messages")
 
     def list_active_jobs(self, project_id: str) -> list[dict]:
         return self.request("GET", f"/api/projects/{project_id}/jobs/active")

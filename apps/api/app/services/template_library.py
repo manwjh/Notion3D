@@ -1,4 +1,4 @@
-"""Read-only template library — ForgeCAD builtin + legacy SCAD + user dir."""
+"""Read-only template library — ForgeCAD builtin + user dir."""
 
 from __future__ import annotations
 
@@ -7,10 +7,9 @@ import re
 from pathlib import Path
 
 from app.config import settings
-from app.services import cad_service, forgecad_service
+from app.services import forgecad_service
 
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_ASSIGN_RE = re.compile(r"^([a-zA-Z_][a-zA-Z0-9_]*)\s*=\s*([\d.]+)\s*;\s*(?://.*)?$")
 _FORGE_PARAM_RE = re.compile(
     r'param\s*\(\s*["\']([^"\']+)["\']\s*,\s*([\d.]+)',
 )
@@ -25,24 +24,10 @@ def _scope_roots(scope: str) -> list[tuple[str, Path]]:
         return [("builtin", settings.templates_dir / "builtin")]
     if scope == "user":
         return [("user", settings.user_templates_dir)]
-    if scope == "legacy":
-        return [("legacy", settings.templates_dir / "legacy" / "scad" / "builtin")]
     return [
         ("builtin", settings.templates_dir / "builtin"),
         ("user", settings.user_templates_dir),
-        ("legacy", settings.templates_dir / "legacy" / "scad" / "builtin"),
     ]
-
-
-def _detect_format(entry_dir: Path, meta: dict) -> str:
-    fmt = meta.get("format")
-    if fmt in ("forge", "scad"):
-        return fmt
-    if (entry_dir / "model.forge.js").exists():
-        return "forge"
-    if (entry_dir / "model.scad").exists():
-        return "scad"
-    raise TemplateError(f"模板缺少 model.forge.js 或 model.scad: {entry_dir.name}")
 
 
 def _load_meta(entry_dir: Path) -> dict:
@@ -51,7 +36,9 @@ def _load_meta(entry_dir: Path) -> dict:
         raise TemplateError(f"缺少 meta.json: {entry_dir.name}")
     meta = json.loads(meta_path.read_text(encoding="utf-8"))
     meta.setdefault("id", entry_dir.name)
-    meta["format"] = _detect_format(entry_dir, meta)
+    if not (entry_dir / "model.forge.js").exists():
+        raise TemplateError(f"模板缺少 model.forge.js: {entry_dir.name}")
+    meta["format"] = "forge"
     return meta
 
 
@@ -105,7 +92,7 @@ def list_templates(
                     "license": meta.get("license"),
                     "source": meta.get("source", scope_name),
                     "scope": scope_name,
-                    "format": meta.get("format", "forge"),
+                    "format": "forge",
                     "params": meta.get("params") or [],
                 }
             )
@@ -114,8 +101,12 @@ def list_templates(
 
 def get_template(template_id: str) -> dict:
     scope, entry_dir, meta = _resolve_entry(template_id)
-    fmt = meta.get("format", "forge")
-    result = {
+    forge_path = entry_dir / "model.forge.js"
+    if not forge_path.exists():
+        raise TemplateError(f"模板缺少 model.forge.js: {template_id}")
+    forge_code = forge_path.read_text(encoding="utf-8")
+    forgecad_service.prepare_forge(forge_code)
+    return {
         "id": meta["id"],
         "title": meta.get("title", meta["id"]),
         "description": meta.get("description"),
@@ -124,43 +115,10 @@ def get_template(template_id: str) -> dict:
         "license": meta.get("license"),
         "source": meta.get("source", scope),
         "scope": scope,
-        "format": fmt,
+        "format": "forge",
         "params": meta.get("params") or [],
-        "scad_code": None,
-        "forge_code": None,
+        "forge_code": forge_code,
     }
-    if fmt == "forge":
-        forge_path = entry_dir / "model.forge.js"
-        if not forge_path.exists():
-            raise TemplateError(f"模板缺少 model.forge.js: {template_id}")
-        forge_code = forge_path.read_text(encoding="utf-8")
-        forgecad_service.prepare_forge(forge_code)
-        result["forge_code"] = forge_code
-    else:
-        scad_path = entry_dir / "model.scad"
-        if not scad_path.exists():
-            raise TemplateError(f"模板缺少 model.scad: {template_id}")
-        scad_code = scad_path.read_text(encoding="utf-8")
-        cad_service._sanitize_scad(scad_code)
-        result["scad_code"] = scad_code
-    return result
-
-
-def apply_param_overrides_scad(scad_code: str, params: dict[str, float]) -> str:
-    if not params:
-        return scad_code
-    lines = scad_code.split("\n")
-    for name, value in params.items():
-        line_re = re.compile(rf"^(\s*{re.escape(name)}\s*=\s*)([\d.]+)")
-        replaced = False
-        for i, line in enumerate(lines):
-            if line_re.match(line):
-                lines[i] = line_re.sub(rf"\g<1>{value}", line, count=1)
-                replaced = True
-                break
-        if not replaced:
-            raise TemplateError(f"SCAD 中未找到参数: {name}")
-    return "\n".join(lines)
 
 
 def apply_param_overrides_forge(forge_code: str, params: dict[str, float]) -> str:
@@ -177,33 +135,12 @@ def apply_param_overrides_forge(forge_code: str, params: dict[str, float]) -> st
     return updated
 
 
-def prepare_source(template_id: str, params: dict[str, float] | None = None) -> tuple[dict, str, str]:
-    detail = get_template(template_id)
-    fmt = detail["format"]
-    if fmt == "forge":
-        code = detail["forge_code"] or ""
-        if params:
-            code = apply_param_overrides_forge(code, params)
-        code = forgecad_service.prepare_forge(code)
-        return detail, code, "forge"
-    code = detail["scad_code"] or ""
-    if params:
-        code = apply_param_overrides_scad(code, params)
-    code = cad_service._sanitize_scad(code)
-    return detail, code, "scad"
-
-
-def prepare_scad(template_id: str, params: dict[str, float] | None = None) -> tuple[dict, str]:
-    detail, code, fmt = prepare_source(template_id, params)
-    if fmt != "scad":
-        raise TemplateError(f"模板 {template_id} 是 ForgeCAD 格式，请使用 prepare_forge")
-    return detail, code
-
-
 def prepare_forge(template_id: str, params: dict[str, float] | None = None) -> tuple[dict, str]:
-    detail, code, fmt = prepare_source(template_id, params)
-    if fmt != "forge":
-        raise TemplateError(f"模板 {template_id} 是 OpenSCAD 格式，请使用 prepare_scad")
+    detail = get_template(template_id)
+    code = detail["forge_code"] or ""
+    if params:
+        code = apply_param_overrides_forge(code, params)
+    code = forgecad_service.prepare_forge(code)
     return detail, code
 
 
@@ -211,8 +148,7 @@ def save_user_template(
     *,
     template_id: str,
     title: str,
-    scad_code: str | None = None,
-    forge_code: str | None = None,
+    forge_code: str,
     description: str | None = None,
     tags: list[str] | None = None,
     category: str | None = None,
@@ -224,20 +160,13 @@ def save_user_template(
     if (settings.user_templates_dir / template_id).exists():
         raise TemplateError(f"模板 id 已存在: {template_id}")
 
-    fmt = "forge" if forge_code else "scad"
     entry_dir = settings.user_templates_dir / template_id
     entry_dir.mkdir(parents=True, exist_ok=False)
 
-    if fmt == "forge":
-        forge_code = forgecad_service.prepare_forge(forge_code or "")
-        (entry_dir / "model.forge.js").write_text(forge_code, encoding="utf-8")
-        if params is None:
-            params = _infer_forge_params(forge_code)
-    else:
-        scad_code = cad_service.prepare_scad(scad_code or "")
-        (entry_dir / "model.scad").write_text(scad_code, encoding="utf-8")
-        if params is None:
-            params = _infer_scad_params(scad_code)
+    forge_code = forgecad_service.prepare_forge(forge_code)
+    (entry_dir / "model.forge.js").write_text(forge_code, encoding="utf-8")
+    if params is None:
+        params = _infer_forge_params(forge_code)
 
     meta = {
         "id": template_id,
@@ -247,7 +176,7 @@ def save_user_template(
         "category": category,
         "license": "user",
         "source": "user",
-        "format": fmt,
+        "format": "forge",
         "params": params,
     }
     if derived_from:
@@ -257,48 +186,6 @@ def save_user_template(
         encoding="utf-8",
     )
     meta["scope"] = "user"
-    return meta
-
-
-async def save_user_template_validated(
-    *,
-    template_id: str,
-    title: str,
-    scad_code: str,
-    description: str | None = None,
-    tags: list[str] | None = None,
-    category: str | None = None,
-    params: list[dict] | None = None,
-    derived_from: dict | None = None,
-) -> dict:
-    import tempfile
-
-    scad_code = cad_service.prepare_scad(scad_code)
-    with tempfile.TemporaryDirectory(prefix="notion3d-template-") as tmp:
-        result = await cad_service.validate_scad_render(
-            scad_code,
-            Path(tmp) / "model.stl",
-        )
-
-    meta = save_user_template(
-        template_id=template_id,
-        title=title,
-        scad_code=scad_code,
-        description=description,
-        tags=tags,
-        category=category,
-        params=params,
-        derived_from=derived_from,
-    )
-    if result.warnings:
-        meta_path = settings.user_templates_dir / template_id / "meta.json"
-        stored = json.loads(meta_path.read_text(encoding="utf-8"))
-        stored["validation_warnings"] = result.warnings
-        meta_path.write_text(
-            json.dumps(stored, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        meta["validation_warnings"] = result.warnings
     return meta
 
 
@@ -342,27 +229,6 @@ async def save_user_forge_template_validated(
         )
         meta["validation_warnings"] = result.warnings
     return meta
-
-
-def _infer_scad_params(scad_code: str) -> list[dict]:
-    params: list[dict] = []
-    stop_re = re.compile(
-        r"^\s*(module|function|difference|union|intersection|minkowski|hull)\s*\("
-    )
-    for line in scad_code.split("\n"):
-        if stop_re.match(line):
-            break
-        m = _ASSIGN_RE.match(line.strip())
-        if m:
-            params.append(
-                {
-                    "name": m.group(1),
-                    "label": m.group(1),
-                    "default": float(m.group(2)),
-                    "unit": "mm",
-                }
-            )
-    return params
 
 
 def _infer_forge_params(forge_code: str) -> list[dict]:

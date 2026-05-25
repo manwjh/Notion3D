@@ -2,7 +2,7 @@ from fastapi import APIRouter
 
 from app.config import settings
 from app.models.schemas import AgentProviderOut, HealthOut
-from app.services import cad_service, forgecad_service, forge_preview_service
+from app.services import forgecad_service, forge_preview_service
 from app.services.agents import active_provider_id, bridge_ready, list_provider_info, refresh_provider_cache
 from app.services.capabilities import capabilities, web_chat_mode
 from app.services.links import web_base
@@ -18,7 +18,6 @@ async def health() -> HealthOut:
     return HealthOut(
         status="ok",
         forgecad_available=forgecad_service.forgecad_available(),
-        openscad_available=cad_service.openscad_available(),
         cad_backend=settings.cad_backend,
         web_base_url=web_base(),
         agent_provider=settings.agent_provider,

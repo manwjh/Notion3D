@@ -1,18 +1,12 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Health } from "../api/client";
-import type { SourceBackend } from "../utils/modelParams";
 
 const props = defineProps<{
   health: Health | null;
-  sourceBackend: SourceBackend;
   validationWarnings: string[];
   agentReady: boolean;
 }>();
-
-const backendLabel = computed(() =>
-  props.sourceBackend === "forge" ? "ForgeCAD" : "OpenSCAD legacy",
-);
 
 const forgeStatus = computed(() => {
   if (!props.health?.forgecad_available) return "Forge 未就绪";
@@ -25,7 +19,7 @@ const forgeStatus = computed(() => {
   <footer class="workbench-status-bar" role="contentinfo">
     <span>单位 mm</span>
     <span class="sep">·</span>
-    <span>{{ backendLabel }}</span>
+    <span>ForgeCAD</span>
     <span class="sep">·</span>
     <span :class="{ warn: !health?.forgecad_available }">{{ forgeStatus }}</span>
     <span class="sep">·</span>

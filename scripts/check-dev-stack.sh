@@ -38,7 +38,7 @@ check "Web" "$WEB"
 
 if [ "$fail" -eq 0 ]; then
   echo "---"
-  curl -sf "$API/health" | python3 -c "import sys,json; d=json.load(sys.stdin); print('web_chat_mode:', d.get('web_chat_mode')); print('forgecad:', d.get('forgecad_available')); print('openscad:', d.get('openscad_available')); print('bridge_ready:', d.get('agent_bridge_ready'))"
+  curl -sf "$API/health" | python3 -c "import sys,json; d=json.load(sys.stdin); print('web_chat_mode:', d.get('web_chat_mode')); print('forgecad:', d.get('forgecad_available')); print('bridge_ready:', d.get('agent_bridge_ready'))"
 fi
 
 exit "$fail"

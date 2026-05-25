@@ -1,4 +1,4 @@
-"""CAD backend abstraction — ForgeCAD primary, OpenSCAD legacy."""
+"""CAD backend abstraction — ForgeCAD only."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from enum import Enum
 
 class CadBackend(str, Enum):
     forgecad = "forgecad"
-    openscad_legacy = "openscad_legacy"
 
 
 def normalize_backend(value: str | None) -> CadBackend:
@@ -19,9 +18,9 @@ def normalize_backend(value: str | None) -> CadBackend:
         return CadBackend.forgecad
 
 
-def source_filename(backend: CadBackend) -> str:
-    return "model.forge.js" if backend == CadBackend.forgecad else "model.scad"
+def source_filename(_backend: CadBackend = CadBackend.forgecad) -> str:
+    return "model.forge.js"
 
 
-def source_field(backend: CadBackend) -> str:
-    return "forge_code" if backend == CadBackend.forgecad else "scad_code"
+def source_field(_backend: CadBackend = CadBackend.forgecad) -> str:
+    return "forge_code"

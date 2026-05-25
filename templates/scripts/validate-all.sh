@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Validate builtin templates: ForgeCAD (primary) + legacy OpenSCAD.
+# Validate builtin ForgeCAD templates.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(cd "$ROOT/.." && pwd)"
 FORGE_RUNNER="$REPO/apps/forge-runner"
-LEGACY_VALIDATE="${ROOT}/scripts/validate-scad.sh"
 
 failed=0
 passed=0
@@ -22,17 +21,6 @@ if [[ -d "$FORGE_RUNNER" ]]; then
       failed=$((failed + 1))
     fi
     rm -rf "$out"
-  done
-fi
-
-if [[ -x "$LEGACY_VALIDATE" ]]; then
-  for scad in "$ROOT"/legacy/scad/builtin/*/model.scad; do
-    [[ -f "$scad" ]] || continue
-    if "$LEGACY_VALIDATE" "$scad"; then
-      passed=$((passed + 1))
-    else
-      failed=$((failed + 1))
-    fi
   done
 fi
 

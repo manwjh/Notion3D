@@ -1,23 +1,18 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import {
-  parseModelParams,
-  setModelParam,
-  type SourceBackend,
-} from "../utils/modelParams";
+import { parseModelParams, setModelParam } from "../utils/modelParams";
 
 const props = defineProps<{
   code: string;
-  backend?: SourceBackend | null;
   disabled?: boolean;
 }>();
 
 const emit = defineEmits<{ change: [code: string] }>();
 
-const params = computed(() => parseModelParams(props.code, props.backend));
+const params = computed(() => parseModelParams(props.code));
 
 function update(name: string, value: number) {
-  emit("change", setModelParam(props.code, name, value, props.backend));
+  emit("change", setModelParam(props.code, name, value));
 }
 </script>
 

@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     node_bin: str = "node"
     forgecad_bin: str = "forgecad"
     forge_runner_dir: Path = _REPO_ROOT / "apps" / "forge-runner"
-    openscad_bin: str = "openscad"
     web_base_url: str = Field(
         default="http://localhost:5173",
         validation_alias=AliasChoices("NOTION3D_WEB_BASE", "NOTION3D_WEB_BASE_URL"),

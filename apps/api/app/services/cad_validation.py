@@ -1,4 +1,4 @@
-"""SCAD/STL validation helpers — mirrors validate.sh plus printability heuristics."""
+"""STL validation helpers — printability heuristics."""
 
 from __future__ import annotations
 
@@ -7,15 +7,8 @@ import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 
-MIN_WALL_MM = 1.2
-RECOMMENDED_WALL_MM = 1.6
 DEFAULT_BED_MM = 220.0
 MAX_TRIANGLES_WARN = 2_000_000
-
-_WALL_ASSIGN_RE = re.compile(
-    r"^\s*(wall|t|thickness|wall_thickness)\s*=\s*([\d.]+)\s*;",
-    re.IGNORECASE | re.MULTILINE,
-)
 
 
 @dataclass
@@ -24,23 +17,6 @@ class ValidationReport:
 
     def extend(self, other: ValidationReport) -> None:
         self.warnings.extend(other.warnings)
-
-
-def analyze_scad_warnings(scad_code: str) -> ValidationReport:
-    """Static SCAD checks (no OpenSCAD subprocess)."""
-    report = ValidationReport()
-    for match in _WALL_ASSIGN_RE.finditer(scad_code):
-        name = match.group(1)
-        value = float(match.group(2))
-        if value < MIN_WALL_MM:
-            report.warnings.append(
-                f"壁厚参数 {name}={value}mm 低于 FDM 最小建议 {MIN_WALL_MM}mm"
-            )
-        elif value < RECOMMENDED_WALL_MM:
-            report.warnings.append(
-                f"壁厚参数 {name}={value}mm 低于 FDM 推荐 {RECOMMENDED_WALL_MM}mm"
-            )
-    return report
 
 
 def _bounds_from_binary(data: bytes, triangle_count: int) -> tuple[tuple[float, float, float], tuple[float, float, float]] | None:

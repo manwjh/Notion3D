@@ -7,14 +7,12 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, Query
 from app.models.schemas import (
     JobSource,
     ProjectOut,
-    SaveTemplateIn,
     TemplateApplyIn,
     TemplateApplyOut,
     TemplateDetailOut,
     TemplateOut,
     TemplateParamOut,
 )
-from app.services.cad_backend import CadBackend
 from app.services import job_service, storage, template_library
 from app.services.job_present import job_to_out
 
@@ -39,7 +37,6 @@ def _template_detail(item: dict) -> TemplateDetailOut:
     base = _template_out(item)
     return TemplateDetailOut(
         **base.model_dump(),
-        scad_code=item.get("scad_code"),
         forge_code=item.get("forge_code"),
         format=item.get("format", "forge"),
     )
@@ -49,7 +46,7 @@ def _template_detail(item: dict) -> TemplateDetailOut:
 async def list_templates(
     tag: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    scope: str = Query(default="all", pattern="^(all|builtin|user|legacy)$"),
+    scope: str = Query(default="all", pattern="^(all|builtin|user)$"),
 ) -> list[TemplateOut]:
     items = template_library.list_templates(tag=tag, category=category, scope=scope)
     return [_template_out(item) for item in items]
@@ -71,7 +68,7 @@ async def apply_template(
     background_tasks: BackgroundTasks,
 ) -> TemplateApplyOut:
     try:
-        detail, source_code, fmt = template_library.prepare_source(template_id, body.params)
+        detail, forge_code = template_library.prepare_forge(template_id, body.params)
     except template_library.TemplateError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -86,15 +83,13 @@ async def apply_template(
         project = storage.create_project(project_name)
 
     label = body.label or f"模板: {detail['title']}"
-    backend = CadBackend.forgecad if fmt == "forge" else CadBackend.openscad_legacy
     job = job_service.create_render_job(
         project.id,
-        source_code,
+        forge_code,
         label,
         source=JobSource.template.value,
-        backend=backend,
     )
-    background_tasks.add_task(job_service.run_render_scad_job, job["id"])
+    background_tasks.add_task(job_service.run_render_job, job["id"])
 
     return TemplateApplyOut(
         project=project,

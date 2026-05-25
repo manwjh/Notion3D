@@ -16,15 +16,13 @@ from app.models.schemas import (
     ProjectCreate,
     ProjectOut,
     SaveTemplateIn,
-    ScadRenderIn,
-    TemplateJobIn,
     TemplateOut,
     TemplateParamOut,
     VersionStatus,
 )
 from app.services.cad_backend import CadBackend
+from app.services.cad_types import CadError
 from app.services import (
-    cad_service,
     chat_present,
     design_turn,
     forge_preview_service,
@@ -55,7 +53,7 @@ def _version_status(out_dir, meta: dict) -> VersionStatus:
         return VersionStatus.complete
     if meta.get("status") == "preview_ready" or (out_dir / "preview.png").exists():
         return VersionStatus.preview_ready
-    if (out_dir / "model.forge.js").exists() or (out_dir / "model.scad").exists():
+    if (out_dir / "model.forge.js").exists():
         return VersionStatus.pending
     return VersionStatus.pending
 
@@ -67,9 +65,6 @@ def _version_created_at(out_dir) -> datetime:
     forge = out_dir / "model.forge.js"
     if forge.exists():
         return datetime.fromtimestamp(forge.stat().st_mtime)
-    scad = out_dir / "model.scad"
-    if scad.exists():
-        return datetime.fromtimestamp(scad.stat().st_mtime)
     return datetime.fromtimestamp(out_dir.stat().st_mtime)
 
 
@@ -94,7 +89,6 @@ def _version_out(project_id: str, v: int, out_dir) -> ModelVersionOut:
     meta = _version_meta(out_dir)
     status = _version_status(out_dir, meta)
     forge = out_dir / "model.forge.js"
-    scad = out_dir / "model.scad"
     src_files = forgecad_service.list_src_files(out_dir) if forge.exists() else []
     return ModelVersionOut(
         version=v,
@@ -112,11 +106,6 @@ def _version_out(project_id: str, v: int, out_dir) -> ModelVersionOut:
         forge_url=(
             f"/api/projects/{project_id}/versions/{v}/model.forge.js"
             if forge.exists()
-            else None
-        ),
-        scad_url=(
-            f"/api/projects/{project_id}/versions/{v}/model.scad"
-            if scad.exists()
             else None
         ),
         preview_url=(
@@ -171,27 +160,6 @@ async def list_messages(project_id: str) -> list[ChatMessageOut]:
     return chat_present.messages_out(project_id)
 
 
-@router.post("/{project_id}/jobs/template", response_model=JobOut)
-async def create_template_job(
-    project_id: str,
-    body: TemplateJobIn,
-    background_tasks: BackgroundTasks,
-) -> JobOut:
-    """Rule-based NL → SCAD (no LLM). Used by MCP notion3d_template."""
-    if not storage.get_project(project_id):
-        raise HTTPException(status_code=404, detail="项目不存在")
-
-    pick = body.pick.model_dump() if body.pick else None
-    job = job_service.create_template_job(
-        project_id,
-        body.prompt,
-        pick=pick,
-        region=body.region,
-    )
-    background_tasks.add_task(job_service.run_template_job, job["id"])
-    return _job_to_out(job)
-
-
 @router.post("/{project_id}/render-forge", response_model=JobOut)
 async def render_forge(
     project_id: str,
@@ -203,7 +171,7 @@ async def render_forge(
 
     try:
         forge_code = forgecad_service.prepare_forge(body.forge_code)
-    except cad_service.CadError as exc:
+    except CadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     source = body.source.value
@@ -215,7 +183,6 @@ async def render_forge(
         body.label,
         turn_id=turn_id,
         source=source,
-        backend=CadBackend.forgecad,
         forge_files=body.files,
     )
     static_warnings = forgecad_service.static_forge_warnings(forge_code, body.files)
@@ -225,41 +192,6 @@ async def render_forge(
     if turn_id:
         design_turn.register_job(project_id, turn_id, job["id"], prompt=body.label)
     background_tasks.add_task(job_service.run_render_forge_job, job["id"])
-    return _job_to_out(job)
-
-
-@router.post("/{project_id}/render-scad", response_model=JobOut)
-async def render_scad(
-    project_id: str,
-    body: ScadRenderIn,
-    background_tasks: BackgroundTasks,
-) -> JobOut:
-    if not storage.get_project(project_id):
-        raise HTTPException(status_code=404, detail="项目不存在")
-
-    try:
-        scad_code = cad_service.prepare_scad(body.scad_code)
-    except cad_service.CadError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    source = body.source.value
-    turn_id = design_turn.active_turn_id(project_id) if source == JobSource.agent.value else None
-
-    job = job_service.create_render_job(
-        project_id,
-        scad_code,
-        body.label,
-        turn_id=turn_id,
-        source=source,
-        backend=CadBackend.openscad_legacy,
-    )
-    static_warnings = cad_service.static_scad_warnings(scad_code)
-    if static_warnings:
-        job_service.update_job(job["id"], validation_warnings=static_warnings)
-        job = job_service.get_job(job["id"]) or job
-    if turn_id:
-        design_turn.register_job(project_id, turn_id, job["id"], prompt=body.label)
-    background_tasks.add_task(job_service.run_render_scad_job, job["id"])
     return _job_to_out(job)
 
 
@@ -291,10 +223,9 @@ async def list_versions(project_id: str) -> list[ModelVersionOut]:
     for v in range(1, project.latest_version + 1):
         out_dir = storage.version_dir(project_id, v)
         forge = out_dir / "model.forge.js"
-        scad = out_dir / "model.scad"
         preview = out_dir / "preview.png"
         stl = out_dir / "model.stl"
-        if not forge.exists() and not scad.exists() and not preview.exists() and not stl.exists():
+        if not forge.exists() and not preview.exists() and not stl.exists():
             continue
         versions.append(_version_out(project_id, v, out_dir))
     return versions
@@ -310,9 +241,9 @@ async def resume_version_stl(
         raise HTTPException(status_code=404, detail="项目不存在")
     try:
         job = await job_service.resume_version_stl(project_id, version)
-    except cad_service.CadError as exc:
+    except CadError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    background_tasks.add_task(job_service.run_render_scad_job, job["id"])
+    background_tasks.add_task(job_service.run_render_job, job["id"])
     return _job_to_out(job)
 
 
@@ -361,7 +292,7 @@ async def get_forge_sources(project_id: str, version: int) -> ForgeSourcesOut:
     out_dir = storage.version_dir(project_id, version)
     try:
         sources = forgecad_service.read_forge_sources(out_dir)
-    except cad_service.CadError as exc:
+    except CadError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     meta = _version_meta(out_dir)
     return ForgeSourcesOut(
@@ -379,7 +310,7 @@ async def download_forge_src(project_id: str, version: int, file_path: str) -> F
     out_dir = storage.version_dir(project_id, version)
     try:
         content = forgecad_service.read_src_file(out_dir, file_path)
-    except cad_service.CadError as exc:
+    except CadError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     rel = file_path.strip().lstrip("/").replace("\\", "/")
     filename = rel.replace("/", "_")
@@ -396,14 +327,6 @@ async def download_forge(project_id: str, version: int) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Forge 源码不存在")
     return FileResponse(path, media_type="text/javascript", filename=f"model_v{version}.forge.js")
-
-
-@router.get("/{project_id}/versions/{version}/model.scad")
-async def download_scad(project_id: str, version: int) -> FileResponse:
-    path = storage.version_dir(project_id, version) / "model.scad"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="SCAD 不存在")
-    return FileResponse(path, media_type="text/plain", filename=f"model_v{version}.scad")
 
 
 @router.get("/{project_id}/versions/{version}/preview.png")
@@ -423,49 +346,28 @@ async def save_version_as_template(
     if not storage.get_project(project_id):
         raise HTTPException(status_code=404, detail="项目不存在")
 
-    scad_path = storage.version_dir(project_id, version) / "model.scad"
     forge_path = storage.version_dir(project_id, version) / "model.forge.js"
-    if not scad_path.exists() and not forge_path.exists():
-        raise HTTPException(status_code=404, detail="该版本尚无建模源码")
+    if not forge_path.exists():
+        raise HTTPException(status_code=404, detail="该版本尚无 Forge 源码")
 
-    if forge_path.exists():
-        forge_code = forge_path.read_text(encoding="utf-8")
-        try:
-            meta = await template_library.save_user_forge_template_validated(
-                template_id=body.id,
-                title=body.title,
-                forge_code=forge_code,
-                description=body.description,
-                tags=body.tags,
-                category=body.category,
-                derived_from={
-                    "project_id": project_id,
-                    "version": version,
-                },
-            )
-        except template_library.TemplateError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except cad_service.CadError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-    else:
-        scad_code = scad_path.read_text(encoding="utf-8")
-        try:
-            meta = await template_library.save_user_template_validated(
-                template_id=body.id,
-                title=body.title,
-                scad_code=scad_code,
-                description=body.description,
-                tags=body.tags,
-                category=body.category,
-                derived_from={
-                    "project_id": project_id,
-                    "version": version,
-                },
-            )
-        except template_library.TemplateError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except cad_service.CadError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+    forge_code = forge_path.read_text(encoding="utf-8")
+    try:
+        meta = await template_library.save_user_forge_template_validated(
+            template_id=body.id,
+            title=body.title,
+            forge_code=forge_code,
+            description=body.description,
+            tags=body.tags,
+            category=body.category,
+            derived_from={
+                "project_id": project_id,
+                "version": version,
+            },
+        )
+    except template_library.TemplateError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except CadError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     return TemplateOut(
         id=meta["id"],

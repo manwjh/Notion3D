@@ -63,37 +63,6 @@ def notion3d_create_project(name: str = "Agent 项目") -> str:
 
 
 @mcp.tool()
-def notion3d_template(
-    project_id: str,
-    prompt: str,
-    region: str | None = None,
-    pick_x: float | None = None,
-    pick_y: float | None = None,
-    pick_z: float | None = None,
-    pick_label: str | None = None,
-) -> str:
-    """Dev-only rule-based NL→SCAD (no LLM). Do not use for Agent modeling."""
-    pick = None
-    if pick_x is not None and pick_y is not None and pick_z is not None:
-        pick = {
-            "x": pick_x,
-            "y": pick_y,
-            "z": pick_z,
-            "nx": 0.0,
-            "ny": 1.0,
-            "nz": 0.0,
-            "label": pick_label,
-        }
-    job = client.template(project_id, prompt, pick=pick, region=region)
-    return _out(
-        {
-            **job,
-            "hint": "Poll notion3d_get_job or use notion3d_wait_job until status is succeeded/failed.",
-        }
-    )
-
-
-@mcp.tool()
 def notion3d_get_job(project_id: str, job_id: str) -> str:
     """Get job status (pending/running/succeeded/failed) with preview/STL phase info."""
     return _out(client.get_job(project_id, job_id))
@@ -139,7 +108,7 @@ def notion3d_list_templates(
 
 @mcp.tool()
 def notion3d_get_template(template_id: str) -> str:
-    """Get template metadata and forge_code / scad_code by id."""
+    """Get template metadata and forge_code by id."""
     return _out(client.get_template(template_id))
 
 
@@ -221,16 +190,6 @@ def notion3d_render_forge(
         if not isinstance(files, dict):
             raise ValueError("files_json must be a JSON object")
     return _out(client.render_forge(project_id, forge_code, label=label, files=files))
-
-
-@mcp.tool()
-def notion3d_render_scad(
-    project_id: str,
-    scad_code: str,
-    label: str = "MCP 渲染 SCAD",
-) -> str:
-    """Submit legacy OpenSCAD for STL rendering (templates/legacy scope only)."""
-    return _out(client.render_scad(project_id, scad_code, label=label))
 
 
 @mcp.tool()

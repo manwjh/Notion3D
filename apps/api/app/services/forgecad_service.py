@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from app.config import settings
-from app.services.cad_service import CadError, RenderResult
+from app.services.cad_types import CadError, RenderResult
 
 
 @dataclass

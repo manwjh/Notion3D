@@ -1,6 +1,6 @@
 # ForgeCAD 后端
 
-Notion3D 默认 CAD 内核为 **ForgeCAD**（`apps/forge-runner` + ForgeCAD CLI）。
+Notion3D 使用 **ForgeCAD**（`apps/forge-runner` + ForgeCAD CLI）作为唯一建模内核。
 
 ## 渲染链路
 
@@ -12,8 +12,8 @@ notion3d_render_forge → Engine → export-parts.mjs → ForgeCAD CLI
 
 ## Forge 实时预览
 
-- API `POST .../versions/{v}/forge-preview` 同步源码到 `data/forge-preview/`
-- ForgeCAD Studio 默认 `:5174`；Web iframe 经 Vite 代理 `/forge-preview/`
+- `POST .../versions/{v}/forge-preview` 同步源码到 `data/forge-preview/`
+- ForgeCAD Studio `:5174`；Web iframe 经 Vite 代理
 
 ## 产物
 
@@ -21,7 +21,7 @@ notion3d_render_forge → Engine → export-parts.mjs → ForgeCAD CLI
 |------|------|
 | `model.forge.js` | 源脚本 |
 | `model.stl` | 合并网格 |
-| `parts.json` | 部件清单（id、label、color、opacity） |
+| `parts.json` | 部件清单 |
 | `parts/{id}.stl` | 分件网格 |
 
 ## 环境
@@ -32,5 +32,3 @@ make dev AGENT=cursor_sdk
 ```
 
 Health → `forgecad_available: true`
-
-Legacy OpenSCAD（`model.scad`、旧 API）见 [architecture.md](architecture.md#legacy-engine-保留)。

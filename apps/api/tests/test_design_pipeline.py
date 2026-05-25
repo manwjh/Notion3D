@@ -31,7 +31,7 @@ def test_design_plan_class_c_blocks(client, project_id):
         json={
             "turn_id": "turn-2",
             "task_class": "C",
-            "summary": "卡通角色不适合 OpenSCAD",
+            "summary": "卡通角色不适合 ForgeCAD",
             "strategy": "chat_only",
         },
     )

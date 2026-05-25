@@ -45,7 +45,6 @@ export type ModelVersion = {
   stl_url: string | null;
   parts_url: string | null;
   forge_url: string | null;
-  scad_url: string | null;
   preview_url: string | null;
   cad_backend?: string | null;
   created_at: string;
@@ -79,7 +78,6 @@ export type WebChatMode = "agent" | "setup_required";
 export type Health = {
   status: string;
   forgecad_available: boolean;
-  openscad_available: boolean;
   forge_preview_available?: boolean;
   forge_preview_running?: boolean;
   cad_backend?: string;
@@ -206,17 +204,6 @@ export const renderForge = (
       source,
       ...(files && Object.keys(files).length ? { files } : {}),
     }),
-  });
-
-export const renderScad = (
-  projectId: string,
-  scadCode: string,
-  label?: string,
-  source: "manual" | "agent" = "manual",
-) =>
-  request<Job>(`/api/projects/${projectId}/render-scad`, {
-    method: "POST",
-    body: JSON.stringify({ scad_code: scadCode, label: label ?? "手动编辑", source }),
   });
 
 export type ForgePreviewResult = {

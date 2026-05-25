@@ -4,7 +4,6 @@ import type { Job } from "../api/client";
 import type { JobPhase } from "../types/generation";
 import type { ModelPart } from "../types/parts";
 import type { ModelPick } from "../types/pick";
-import type { SourceBackend } from "../utils/modelParams";
 import PartTreePanel from "./PartTreePanel.vue";
 import ModelToolsPanel from "./ModelToolsPanel.vue";
 
@@ -13,7 +12,6 @@ const props = defineProps<{
   pick?: ModelPick | null;
   srcFiles?: string[];
   hasForgeSource?: boolean;
-  sourceBackend?: SourceBackend;
   projectId: string | null;
   sourceUrl: string | null;
   forgeSourcesUrl?: string | null;
@@ -40,7 +38,7 @@ const files = computed(() => {
   if (props.hasForgeSource) list.push("model.forge.js");
   for (const f of props.srcFiles ?? []) list.push(`src/${f}`);
   if (!list.length && props.sourceUrl) {
-    list.push(props.sourceBackend === "scad" ? "model.scad" : "model.forge.js");
+    list.push("model.forge.js");
   }
   return list;
 });
@@ -76,7 +74,6 @@ const files = computed(() => {
         :project-id="projectId"
         :source-url="sourceUrl"
         :forge-sources-url="forgeSourcesUrl"
-        :source-backend="sourceBackend ?? 'forge'"
         :version="version"
         :generating="generating"
         :generation-phase="generationPhase"

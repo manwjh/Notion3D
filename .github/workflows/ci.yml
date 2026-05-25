@@ -22,9 +22,6 @@ jobs:
       - name: Install ForgeCAD runner
         run: cd apps/forge-runner && npm install
 
-      - name: Install OpenSCAD (legacy)
-        run: sudo apt-get update && sudo apt-get install -y openscad
-
       - name: Install API (dev)
         run: cd apps/api && python -m pip install -e ".[dev]"
 
