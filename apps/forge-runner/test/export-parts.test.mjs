@@ -10,7 +10,7 @@ import { extractReturnExpression } from "../part-source.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const runnerRoot = path.resolve(__dirname, "..");
-const modelS = path.resolve(runnerRoot, "../../data/forge-preview/model-s.forge.js");
+const modelS = path.resolve(runnerRoot, "test/fixtures/model-s.forge.js");
 
 test("extractReturnExpression uses final return, not inner IIFE returns", () => {
   const source = fs.readFileSync(modelS, "utf8");

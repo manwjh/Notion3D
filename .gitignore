@@ -4,8 +4,10 @@ dist/
 __pycache__/
 *.pyc
 .env
+.cursor/mcp.json
 data/projects/
 data/jobs/
+data/forge-preview/
 tmp/
 .DS_Store
 *.egg-info/

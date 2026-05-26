@@ -6,6 +6,19 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture(autouse=True)
+def noop_agent_activity_loop(monkeypatch):
+    """Turn tests mock finish_agent_run; skip the live bridge poll loop."""
+
+    async def _noop(_project_id: str) -> None:
+        return None
+
+    monkeypatch.setattr(
+        "app.services.agent_activity.sync_agent_activity_loop",
+        _noop,
+    )
+
+
 @pytest.fixture
 def client(tmp_path, monkeypatch):
     from pathlib import Path

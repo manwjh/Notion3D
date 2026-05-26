@@ -61,4 +61,6 @@ stop:
 test:
 	cd apps/api && $(PYTHON) -m pytest -q
 	cd apps/web && npm run build
+	cd apps/forge-runner && npm test
+	cd apps/agent-bridge && npm test
 	bash templates/scripts/validate-all.sh

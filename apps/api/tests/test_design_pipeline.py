@@ -158,7 +158,7 @@ def test_design_review_last_retry_warns(client, project_id):
             "turn_id": "turn-8",
             "status": "retry",
             "retry_phase": "author",
-            "notes": ["SCAD 执行有误"],
+            "notes": ["Forge 执行有误"],
         },
     )
     assert res.status_code == 200

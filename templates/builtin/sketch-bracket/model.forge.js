@@ -7,6 +7,9 @@ const filletR = param("Fillet", 2, { min: 0.5, max: 8, unit: "mm" });
 
 const base = box(w, d, t, true);
 const wall = box(t, d, h, true).translate(0, 0, t);
-const bracket = union(base, wall).fillet(filletR).color("#5B8DEF");
+let bracket = union(base, wall);
+if (filletR > 0 && typeof bracket.fillet === "function") {
+  bracket = bracket.fillet(filletR);
+}
 
-return [{ name: "Bracket", shape: bracket }];
+return [{ name: "Bracket", shape: bracket.color("#5B8DEF") }];

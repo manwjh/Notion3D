@@ -34,5 +34,14 @@ jobs:
       - name: Web build
         run: cd apps/web && npm run build
 
+      - name: Install agent-bridge
+        run: cd apps/agent-bridge && npm ci
+
+      - name: forge-runner tests
+        run: cd apps/forge-runner && npm test
+
+      - name: agent-bridge tests
+        run: cd apps/agent-bridge && npm test
+
       - name: Validate builtin templates
         run: bash templates/scripts/validate-all.sh

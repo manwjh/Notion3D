@@ -1,6 +1,6 @@
 [project]
 name = "notion3d-api"
-version = "0.1.0"
+version = "0.3.0"
 description = "Notion3D — ForgeCAD assembly rendering API"
 requires-python = ">=3.11"
 dependencies = [
