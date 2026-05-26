@@ -10,6 +10,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { resolvePartSourceRef } from "./part-source.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -174,8 +175,13 @@ function main() {
   fs.copyFileSync(scriptPath, mainCopy);
 
   const srcDir = path.join(path.dirname(scriptPath), "src");
+  const srcFiles = {};
   if (fs.existsSync(srcDir)) {
     copyDirRecursive(srcDir, path.join(workDir, "src"));
+    for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      srcFiles[entry.name] = fs.readFileSync(path.join(srcDir, entry.name), "utf-8");
+    }
   }
 
   const combinedStl = path.join(outDir, "model.stl");
@@ -210,12 +216,15 @@ function main() {
       }
     }
 
+    const sourceRef = resolvePartSourceRef(source, name, id, srcFiles);
+
     manifestParts.push({
       id,
       label: name,
       color: PART_COLORS[i % PART_COLORS.length],
       stl_url: `/api/projects/${projectId}/versions/${version}/parts/${id}.stl`,
       opacity: name.toLowerCase().includes("shell") ? 0.35 : 1.0,
+      ...(sourceRef ? { source_ref: sourceRef } : {}),
     });
   }
 

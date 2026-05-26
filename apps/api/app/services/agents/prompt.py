@@ -65,6 +65,8 @@ project_id="{project_id}"
 
 - 单位 mm；可调参数用 `param("Name", default, {{ min, max, unit: "mm" }})`
 - 多部件：`return [ {{ name: "Shell", shape: ... }}, {{ name: "Motor", shape: ... }} ]`
+- 每个部件用命名变量（`const shell = ...` → `shape: shell`），便于 Web 左栏「部件精修」
+- 复杂部件拆到 `src/xxx.forge.js` + `importAssembly("src/xxx.forge.js")`
 - 复杂装配：`importAssembly("src/foo.forge.js")` + render_forge 的 `files_json`
 - 外壳部件 name 含 Shell/外壳 → Web 可半透明预览
 - Web「Forge 实时」= ForgeCAD Studio 内嵌，可调 param 即时看 3D

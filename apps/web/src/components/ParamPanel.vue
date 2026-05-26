@@ -5,11 +5,17 @@ import { parseModelParams, setModelParam } from "../utils/modelParams";
 const props = defineProps<{
   code: string;
   disabled?: boolean;
+  paramNames?: string[];
 }>();
 
 const emit = defineEmits<{ change: [code: string] }>();
 
-const params = computed(() => parseModelParams(props.code));
+const params = computed(() => {
+  const all = parseModelParams(props.code);
+  if (!props.paramNames?.length) return all;
+  const allowed = new Set(props.paramNames);
+  return all.filter((param) => allowed.has(param.name));
+});
 
 function update(name: string, value: number) {
   emit("change", setModelParam(props.code, name, value));

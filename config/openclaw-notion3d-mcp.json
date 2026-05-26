@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "servers": {
+      "notion3d": {
+        "command": "notion3d-mcp",
+        "env": {
+          "NOTION3D_API_BASE": "http://127.0.0.1:8000",
+          "NOTION3D_WEB_BASE": "http://localhost:5173"
+        }
+      }
+    }
+  }
+}

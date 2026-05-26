@@ -1,18 +1,39 @@
 # 本地开发模式
 
+按 Agent 环境选择 profile：
+
 ```bash
-make dev AGENT=cursor_sdk   # Web 对话 + Cursor SDK bridge
-make dev AGENT=hermes       # Web 对话 + Hermes gateway
-make dev AGENT=engine       # 仅 Engine + Web（无 Web 对话）
+make dev AGENT=cursor_sdk   # Web 对话 — Cursor SDK
+make dev AGENT=hermes       # Web 对话 — Hermes
+make dev AGENT=engine       # 无 Web 对话 — MCP / 手动 Forge
 ```
+
+连接说明：[agents/README.md](agents/README.md)
 
 启动后自检：
 
 ```bash
 AGENT=cursor_sdk bash scripts/check-dev-stack.sh
+# 或 AGENT=hermes bash scripts/check-dev-stack.sh
 ```
 
-## cursor_sdk（默认）
+## 局域网访问
+
+```bash
+make dev AGENT=<你的 profile>
+```
+
+局域网内其他设备打开 `http://<运行 dev 机器的 IP>:5173`（启动 banner 会打印该地址）。
+
+分享项目链接时，在 `.env` 设置：
+
+```env
+NOTION3D_WEB_BASE=http://<IP>:5173
+```
+
+Web 设计助手（cursor_sdk / hermes）的 sidecar 在运行 `make dev` 的本机；局域网设备可正常使用对话。
+
+## cursor_sdk
 
 | 进程 | 端口 | 职责 |
 |------|------|------|
@@ -20,22 +41,7 @@ AGENT=cursor_sdk bash scripts/check-dev-stack.sh
 | API | 8000 | Engine |
 | Web | 5173 | 工作台 |
 
-**前置**：`.env` 中 `CURSOR_API_KEY` · `make install`（含 forge-runner）
-
-**数据流**
-
-```
-Web POST /turn → bridge → Cursor Agent（Skills + MCP）
-  → render-forge → ForgeCAD → Web 装配预览
-```
-
-**常见故障**
-
-| 现象 | 处理 |
-|------|------|
-| 助手「未连接」 | 检查 bridge :8787 / `CURSOR_API_KEY` |
-| 有回复无模型 | 看 job 日志；Agent 是否调 `render_forge` |
-| MCP 不可用 | dev.sh 预检；`python -m notion3d_mcp.server` |
+**前置**：`.env` 中 `CURSOR_API_KEY` · `make install`
 
 ## hermes
 
@@ -43,10 +49,10 @@ Web POST /turn → bridge → Cursor Agent（Skills + MCP）
 
 ## engine
 
-无 Web 对话。可用手动编辑 ForgeCAD，或外部 Agent 经 MCP 建模。
+无 Web 对话。左栏手动改 ForgeCAD，或 OpenClaw / IDE 经 MCP 调 Engine。
 
 ## 设计流水线
 
 Agent：`report_design_plan` → `render_forge` → `wait_job` → `report_design_review`。
 
-Engine 会在 Agent 跳步时自动生成 implicit plan / 自动 pass review。详见 [design-pipeline.md](design-pipeline.md)。
+详见 [design-pipeline.md](design-pipeline.md)。

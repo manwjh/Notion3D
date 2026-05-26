@@ -29,6 +29,8 @@ Design Turn 第三阶段：**只执行 plan，写 ForgeCAD 脚本**。
 
 - 单位 mm；参数用 `param("Label", default, { min, max, unit: "mm" })`
 - 多部件：`return [ { name: "PartId", shape: geom.color("#RRGGBB") }, ... ]`
+- **部件精修**：每个部件用独立 `const partId = ...`（变量名与 return 中 shape 一致）；复杂部件可拆到 `src/part-name.forge.js` + `importAssembly`
+- `return` 中 `name` 与 Web 部件树 label 一致，便于点选精修
 - 外壳命名含 `Shell` / `外壳` → Web 半透明模式
 - 多文件：`importAssembly("src/foo.forge.js")` + `files_json='{"foo.forge.js":"..."}'`
 - 可用 `lib.bolt` / `lib.explode` 等 ForgeCAD 标准库

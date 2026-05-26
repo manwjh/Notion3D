@@ -1,63 +1,76 @@
-# Agent 接入适配层
+# Agent 接入
 
-架构见 **[docs/architecture.md](../architecture.md)**。Notion3D **没有 LLM**。Web 对话经后端 **Agent 适配接口** 转发到外部 Agent。
+Notion3D **不含 LLM**。建模智能由外部 Agent 提供；按你的环境选一条路径。
 
-## 本地开发：必须指定集成环境
+## 选路径
 
-```bash
-make dev AGENT=cursor_sdk    # Cursor SDK — bridge + API + Web
-make dev AGENT=hermes        # Hermes Agent — gateway + API + Web
-make dev AGENT=engine        # 仅 API + Web（无 Web 对话）
-make dev-help
-```
+| 你的 Agent 环境 | 用途 | 文档 |
+|-----------------|------|------|
+| **Cursor SDK** | Web 设计助手对话 | [Web · cursor_sdk](#web--cursor_sdk) |
+| **Hermes** | Web 设计助手对话 | [hermes.md](hermes.md) |
+| **OpenClaw** | OpenClaw 经 MCP 建模 | [openclaw.md](openclaw.md) |
+| **Cursor IDE / Claude Code** | IDE 内 Agent 经 MCP | [integrations/README.md](../integrations/README.md) |
+| **无 Agent** | Web 预览、左栏改 Forge | [Web · engine](#web--engine) |
 
-`make dev` **必须**带 `AGENT=`。脚本会校验前置条件、注入 `NOTION3D_AGENT_PROVIDER`，并按 profile 启动 sidecar（bridge 或 hermes gateway）。
-
-| Profile | 进程 | Web 对话 |
-|---------|------|----------|
-| `cursor_sdk` | bridge:8787 + API:8000 + Web:5173 | ✅ Cursor SDK |
-| `hermes` | hermes:8642 + API:8000 + Web:5173 | ✅ Hermes Agent |
-| `engine` | API + Web | ❌ 仅 MCP / 外部 Agent 调 Engine |
+- **Web 设计助手**：`cursor_sdk` 与 `hermes` 二选一，`make dev AGENT=…` 启动对应 sidecar。
+- **OpenClaw / IDE**：`notion3d-mcp` 调 Engine，不经 Web 对话；预览用 Web 工作台。
 
 ---
 
-## cursor_sdk（Web 对话）
+## Web · cursor_sdk
 
 ```env
+# 项目根 .env
 CURSOR_API_KEY=crsr_...
 ```
 
 ```bash
+make install
 make dev AGENT=cursor_sdk
-# 或: make dev-cursor
 ```
 
-`@cursor/sdk` 经 agent-bridge 启动 Agent，挂载 notion3d MCP。
-
-## hermes（Web 对话）
-
-Hermes 使用本机 `hermes gateway` HTTP API + `~/.hermes/config.yaml` 中的 notion3d MCP。
-
-完整步骤：**[docs/agents/hermes.md](hermes.md)**
+打开 Web（`http://localhost:5173` 或局域网 `http://<本机 IP>:5173`）。设计助手显示 **已连接**。
 
 ```bash
-make dev AGENT=hermes
-# 或: make dev-hermes
+curl -s http://127.0.0.1:8000/health | grep web_chat_mode
+# "web_chat_mode":"agent"
 ```
 
-## engine（无 Web 对话）
-
-```bash
-make dev AGENT=engine
-```
+Sidecar：`agent-bridge` `:8787`。
 
 ---
 
-## Web 对话
+## Web · hermes
 
-`POST /api/projects/{id}/turn` — 必须已连接 Agent（`engine` profile 除外）。
+完整步骤见 **[hermes.md](hermes.md)**。
+
+```bash
+make install
+make dev AGENT=hermes
+```
+
+Sidecar：`hermes gateway` `:8642`。
+
+---
+
+## Web · engine
+
+```bash
+make install
+make dev AGENT=engine
+```
+
+启动 API `:8000` 与 Web `:5173`，无设计助手。左栏手动改 ForgeCAD，或配合 OpenClaw / IDE MCP 使用。
+
+---
+
+## 验证（Web 设计助手）
 
 `/health` → `web_chat_mode`: `agent` | `setup_required`
+
+OpenClaw / `engine` 路径下 `setup_required` 属正常（不经 Web 对话）。
+
+Web 内 **助手** 面板可查看 `cursor_sdk` / `hermes` 就绪状态。
 
 ---
 
@@ -65,9 +78,7 @@ make dev AGENT=engine
 
 ```
 scripts/dev.sh
-apps/agent-bridge/          # cursor_sdk
-apps/api/app/services/agents/
-  cursor_sdk.py
-  hermes.py
-  registry.py
+apps/agent-bridge/              # cursor_sdk
+apps/api/app/services/agents/   # cursor_sdk.py, hermes.py
+apps/mcp-server/                # notion3d-mcp（OpenClaw / IDE）
 ```

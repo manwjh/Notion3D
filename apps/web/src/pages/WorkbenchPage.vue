@@ -190,6 +190,10 @@ function onPartsLoaded(parts: ModelPart[]) {
 }
 
 function onPartPick(part: ModelPart) {
+  if (modelPick.value?.element === part.id) {
+    onClearPartPick();
+    return;
+  }
   onModelPick({
     x: 0,
     y: 0,
@@ -200,6 +204,11 @@ function onPartPick(part: ModelPart) {
     element: part.id,
     label: part.label,
   });
+}
+
+function onClearPartPick() {
+  modelPick.value = null;
+  viewportRef.value?.highlightPart(null);
 }
 
 function onTogglePart(partId: string) {
@@ -579,6 +588,7 @@ const editorVersion = computed(() =>
           :hidden="partHidden"
           :opacities="partOpacities"
           @pick="onPartPick"
+          @clear-pick="onClearPartPick"
           @toggle="onTogglePart"
           @opacity="onPartOpacity"
           @focus="onFocusPart"

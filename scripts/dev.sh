@@ -78,6 +78,18 @@ banner() {
   fi
   echo "  API     http://127.0.0.1:8000"
   echo "  Web     http://localhost:5173"
+  local lan_ip=""
+  if command -v ipconfig >/dev/null 2>&1; then
+    for iface in en0 en1; do
+      lan_ip="$(ipconfig getifaddr "$iface" 2>/dev/null || true)"
+      [ -n "$lan_ip" ] && break
+    done
+  elif command -v hostname >/dev/null 2>&1; then
+    lan_ip="$(hostname -I 2>/dev/null | awk '{print $1}' || true)"
+  fi
+  if [ -n "$lan_ip" ]; then
+    echo "          http://${lan_ip}:5173  （局域网）"
+  fi
   [ "$AGENT" = "engine" ] && echo "  （无 Agent sidecar — Web 对话不可用）"
   echo "Ctrl+C 停止全部；或另开终端 make stop"
 }

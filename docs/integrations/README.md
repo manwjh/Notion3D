@@ -1,14 +1,14 @@
 # 外部 Agent 经 MCP 接入
 
-Notion3D Engine 不含 LLM。在 Cursor IDE、Claude Code 等环境中配置 `notion3d-mcp` 即可建模。
+Notion3D Engine 不含 LLM。Cursor IDE、Claude Code、OpenClaw 等配置 **notion3d-mcp** 即可建模。
 
-架构与 API 见 [architecture.md](../architecture.md)。工作流与 Skills 见 [AGENTS.md](../../AGENTS.md)。
+Web 设计助手（cursor_sdk / hermes）见 [agents/README.md](../agents/README.md)。
 
 ## 1. 启动 Engine
 
 ```bash
 make install
-make dev AGENT=engine    # 或 make api（仅 Engine）
+make dev AGENT=engine
 ```
 
 ## 2. 安装 MCP
@@ -21,22 +21,24 @@ cd apps/mcp-server && pip install -e .
 |------|------|------|
 | `NOTION3D_API_BASE` | `http://127.0.0.1:8000` | Engine 地址 |
 
-运行：`make mcp` 或 `notion3d-mcp`
+## 3. 按 Agent 环境配置
 
-## 3. 配置 Agent
+| Agent | 配置位置 | 文档 |
+|-------|----------|------|
+| OpenClaw | `~/.openclaw/openclaw.json` → `mcp.servers` | [agents/openclaw.md](../agents/openclaw.md) |
+| Cursor IDE | `.cursor/mcp.json` | 见 [.cursor/mcp.json.example](../../.cursor/mcp.json.example) |
+| Claude Code | Claude MCP 配置 | `command: notion3d-mcp`，同上 env |
+| Hermes（Web 对话） | `~/.hermes/config.yaml` | [agents/hermes.md](../agents/hermes.md) |
 
-| 场景 | 文档 |
-|------|------|
-| Web 工作台对话 | [agents/README.md](../agents/README.md) |
-| Hermes | [agents/hermes.md](../agents/hermes.md) |
-| Cursor / Claude Code | 在 MCP 配置中启动 `notion3d-mcp`（stdio） |
+示例文件：
 
-示例：`config/hermes-notion3d-mcp.yaml`
+- [config/openclaw-notion3d-mcp.json](../../config/openclaw-notion3d-mcp.json)
+- [config/hermes-notion3d-mcp.yaml](../../config/hermes-notion3d-mcp.yaml)
 
-## 故障排查
+## 4. 预览
 
-| 现象 | 检查 |
-|------|------|
-| MCP 不可用 | `make api`；`notion3d_health` |
-| ForgeCAD 失败 | `cd apps/forge-runner && npm install` |
-| Web 无模型 | Agent 是否调用 `render_forge` + `wait_job` |
+建模完成后在 Web 打开项目：
+
+```
+http://localhost:5173/p/<project_id>
+```

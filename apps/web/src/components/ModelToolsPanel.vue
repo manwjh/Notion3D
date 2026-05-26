@@ -2,8 +2,12 @@
 import { computed, ref, watch } from "vue";
 import { renderForge, type Job } from "../api/client";
 import type { JobPhase } from "../types/generation";
+import type { ModelPart } from "../types/parts";
 import { parseModelParams } from "../utils/modelParams";
+import type { ForgeSources, PartCodeFocus } from "../utils/partCode";
+import ForgeCodeEditor from "./ForgeCodeEditor.vue";
 import ParamPanel from "./ParamPanel.vue";
+import PartRefinePanel from "./PartRefinePanel.vue";
 
 const MAIN_FILE = "__main__";
 
@@ -16,7 +20,10 @@ const props = defineProps<{
   generationPhase?: JobPhase;
   trackJob: (job: Job, prompt: string) => Promise<void>;
   embedded?: boolean;
+  selectedPart?: ModelPart | null;
 }>();
+
+const emit = defineEmits<{ clearPick: [] }>();
 
 const tab = ref<"params" | "code">("params");
 const codeExpanded = ref(false);
@@ -26,6 +33,13 @@ const forgeFiles = ref<Record<string, string>>({});
 const busy = ref(false);
 const status = ref<string | null>(null);
 const dirty = ref(false);
+const codeHighlight = ref<{ start: number; end: number } | null>(null);
+const codeEditorRef = ref<InstanceType<typeof ForgeCodeEditor> | null>(null);
+
+const sources = computed<ForgeSources>(() => ({
+  main: forgeMain.value,
+  files: forgeFiles.value,
+}));
 
 const code = computed({
   get() {
@@ -67,6 +81,7 @@ watch(
       forgeFiles.value = {};
       activeFile.value = MAIN_FILE;
       dirty.value = false;
+      codeHighlight.value = null;
       return;
     }
     let cancelled = false;
@@ -81,6 +96,7 @@ watch(
           forgeFiles.value = data.files ?? {};
           activeFile.value = MAIN_FILE;
           dirty.value = false;
+          codeHighlight.value = null;
           return;
         }
         if (!url) return;
@@ -92,6 +108,7 @@ watch(
         forgeFiles.value = {};
         activeFile.value = MAIN_FILE;
         dirty.value = false;
+        codeHighlight.value = null;
       } catch (e) {
         if (!cancelled) status.value = e instanceof Error ? e.message : "加载失败";
       }
@@ -111,14 +128,49 @@ watch(
   },
 );
 
+watch(
+  () => props.selectedPart?.id,
+  () => {
+    if (!props.selectedPart) codeHighlight.value = null;
+  },
+);
+
 function onCodeChange(newCode: string) {
   code.value = newCode;
 }
 
-function onEditorInput(e: Event) {
-  if (props.generating && !code.value) return;
-  onCodeChange((e.target as HTMLTextAreaElement).value);
+function onSourcesChange(next: ForgeSources) {
+  forgeMain.value = next.main;
+  forgeFiles.value = next.files;
+  dirty.value = true;
 }
+
+function onEditorInput(value: string) {
+  if (props.generating && !code.value) return;
+  onCodeChange(value);
+}
+
+function expandFullCode(focus: PartCodeFocus) {
+  activeFile.value = focus.sourceFile;
+  codeHighlight.value = focus.highlightLines;
+  codeExpanded.value = true;
+  void codeEditorRef.value?.scrollToHighlight();
+}
+
+function openFile(filePath: string) {
+  if (filePath === "model.forge.js") {
+    activeFile.value = MAIN_FILE;
+  } else if (filePath.startsWith("src/")) {
+    const key = filePath.slice(4);
+    if (forgeFiles.value[key] != null || fileKeys.value.includes(key)) {
+      activeFile.value = key;
+    }
+  }
+  codeExpanded.value = true;
+  codeHighlight.value = null;
+}
+
+defineExpose({ openFile });
 
 async function handleApply() {
   if (!props.projectId || !forgeMain.value.trim() || busy.value) return;
@@ -182,12 +234,22 @@ async function handleApply() {
     </div>
 
     <template v-if="embedded">
+      <PartRefinePanel
+        v-if="selectedPart && !(generating && !forgeMain)"
+        :part="selectedPart"
+        :sources="sources"
+        :disabled="busy || (generating && !forgeMain)"
+        @change="onSourcesChange"
+        @expand-full-code="expandFullCode"
+        @clear-pick="emit('clearPick')"
+      />
+
       <div class="model-tools-embedded-body">
         <p v-if="generating && !forgeMain" class="model-tools-waiting">
           <span class="spinner spinner--inline" aria-hidden="true" />
           模型生成中…
         </p>
-        <template v-else-if="hasParams">
+        <template v-else-if="!selectedPart && hasParams">
           <ParamPanel
             :code="code"
             :disabled="busy || (generating && !forgeMain)"
@@ -195,9 +257,18 @@ async function handleApply() {
             @change="onCodeChange"
           />
         </template>
-        <p v-else class="model-tools-empty">无可调参数，展开下方代码或直接对话修改。</p>
+        <p v-else-if="!selectedPart && !hasParams" class="model-tools-empty">
+          无可调参数，展开下方代码或直接对话修改。
+        </p>
+        <p v-else-if="selectedPart" class="model-tools-tip model-tools-tip--part">
+          调整部件参数/代码后点「应用更改」。此路径不经过设计助手。
+        </p>
 
-        <details :open="codeExpanded" class="model-tools-code-details" @toggle="codeExpanded = ($event.target as HTMLDetailsElement).open">
+        <details
+          :open="codeExpanded"
+          class="model-tools-code-details"
+          @toggle="codeExpanded = ($event.target as HTMLDetailsElement).open"
+        >
           <summary>高级代码</summary>
           <div v-if="hasMultiFile" class="model-tools-files">
             <button
@@ -206,19 +277,24 @@ async function handleApply() {
               type="button"
               class="model-tools-file-tab"
               :class="{ active: activeFile === key }"
-              @click="activeFile = key"
+              @click="
+                activeFile = key;
+                codeHighlight = null;
+              "
             >
               {{ fileLabel(key) }}
             </button>
           </div>
-          <textarea
-            class="forge-editor forge-editor--embedded"
-            :value="generating && !forgeMain ? GENERATING_PLACEHOLDER : code"
+          <ForgeCodeEditor
+            ref="codeEditorRef"
+            :model-value="generating && !forgeMain ? GENERATING_PLACEHOLDER : code"
+            :highlight-lines="codeHighlight"
             :placeholder="codePlaceholder"
-            spellcheck="false"
+            min-height="100px"
+            max-height="160px"
             :disabled="busy || (generating && !forgeMain)"
             :readonly="generating && !forgeMain"
-            @input="onEditorInput"
+            @update:model-value="onEditorInput"
           />
         </details>
 
@@ -231,7 +307,7 @@ async function handleApply() {
             :disabled="!forgeMain.trim() || busy || (generating && !forgeMain)"
             @click="handleApply"
           >
-            {{ busy ? "更新中…" : "应用更改" }}
+            {{ busy ? "更新中…" : selectedPart ? "应用精修" : "应用更改" }}
           </button>
         </div>
       </div>
@@ -274,15 +350,12 @@ async function handleApply() {
           {{ fileLabel(key) }}
         </button>
       </div>
-      <textarea
-        class="forge-editor"
-        :class="{ 'forge-editor--waiting': generating && !forgeMain }"
-        :value="generating && !forgeMain ? GENERATING_PLACEHOLDER : code"
+      <ForgeCodeEditor
+        :model-value="generating && !forgeMain ? GENERATING_PLACEHOLDER : code"
         :placeholder="codePlaceholder"
-        spellcheck="false"
         :disabled="busy || (generating && !forgeMain)"
         :readonly="generating && !forgeMain"
-        @input="onEditorInput"
+        @update:model-value="onEditorInput"
       />
       <p v-if="generating && !forgeMain && generationPhase" class="forge-waiting-hint">
         {{
@@ -342,9 +415,7 @@ async function handleApply() {
   padding: 0.25rem 0;
 }
 
-.forge-editor--embedded {
-  min-height: 100px;
-  max-height: 160px;
+.model-tools-code-details :deep(.forge-code-editor) {
   margin-top: 0.35rem;
 }
 
@@ -353,5 +424,12 @@ async function handleApply() {
   align-items: center;
   gap: 0.4rem;
   flex-wrap: wrap;
+}
+
+.model-tools-tip--part {
+  margin: 0;
+  font-size: 0.68rem;
+  color: var(--text-subtle);
+  line-height: 1.4;
 }
 </style>

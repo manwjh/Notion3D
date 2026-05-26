@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 import type { Job } from "../api/client";
 import type { JobPhase } from "../types/generation";
 import type { ModelPart } from "../types/parts";
@@ -25,6 +25,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   pick: [part: ModelPart];
+  clearPick: [];
   toggle: [partId: string];
   opacity: [partId: string, value: number];
   focus: [partId: string];
@@ -32,6 +33,8 @@ const emit = defineEmits<{
   fitAll: [];
   shellMode: [];
 }>();
+
+const toolsRef = ref<InstanceType<typeof ModelToolsPanel> | null>(null);
 
 const files = computed(() => {
   const list: string[] = [];
@@ -42,6 +45,20 @@ const files = computed(() => {
   }
   return list;
 });
+
+const selectedPart = computed(() => {
+  const element = props.pick?.element;
+  if (!element) return null;
+  return props.parts.find((part) => part.id === element) ?? null;
+});
+
+const toolsSectionTitle = computed(() =>
+  selectedPart.value ? `精修 · ${selectedPart.value.label}` : "参数 / 代码",
+);
+
+function openFile(filePath: string) {
+  toolsRef.value?.openFile(filePath);
+}
 </script>
 
 <template>
@@ -63,13 +80,18 @@ const files = computed(() => {
     <section v-if="files.length" class="structure-section structure-files">
       <div class="structure-section-head">文件</div>
       <ul class="structure-file-list">
-        <li v-for="file in files" :key="file">{{ file }}</li>
+        <li v-for="file in files" :key="file">
+          <button type="button" class="structure-file-btn" @click="openFile(file)">
+            {{ file }}
+          </button>
+        </li>
       </ul>
     </section>
 
     <section v-if="projectId && sourceUrl" class="structure-section structure-tools">
-      <div class="structure-section-head">参数 / 代码</div>
+      <div class="structure-section-head">{{ toolsSectionTitle }}</div>
       <ModelToolsPanel
+        ref="toolsRef"
         embedded
         :project-id="projectId"
         :source-url="sourceUrl"
@@ -78,6 +100,8 @@ const files = computed(() => {
         :generating="generating"
         :generation-phase="generationPhase"
         :track-job="trackJob"
+        :selected-part="selectedPart"
+        @clear-pick="emit('clearPick')"
       />
     </section>
   </aside>
@@ -114,11 +138,22 @@ const files = computed(() => {
   overflow: auto;
 }
 
-.structure-file-list li {
+.structure-file-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
   font-family: ui-monospace, Menlo, Monaco, Consolas, monospace;
   font-size: 0.72rem;
   color: #8ec0ff;
   padding: 0.2rem 0;
+  cursor: pointer;
+}
+
+.structure-file-btn:hover {
+  color: #b8d8ff;
+  text-decoration: underline;
 }
 
 .structure-tools {
