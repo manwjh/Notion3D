@@ -59,6 +59,8 @@ stop:
 	@-lsof -ti :8642 | xargs kill -9 2>/dev/null && echo "  Web Turn gateway stopped" || true
 
 test:
+	cd apps/mcp-server && $(PYTHON) -m pip install -e . -q
+	cd apps/api && $(PYTHON) -m pip install -e ".[dev]" -q
 	cd apps/api && $(PYTHON) -m pytest -q
 	cd apps/web && npm run build
 	cd apps/forge-runner && npm test
