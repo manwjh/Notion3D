@@ -1,23 +1,42 @@
 # 本地开发模式
 
-端口、`WEB_TURN` 与进程对照。**部署方案**（MCP / bridge / gateway / 手动）见 [README.md § 建议部署](../README.md#建议部署)。
+端口、`WEB_TURN` 与进程对照。
+
+| 文档 | 说明 |
+|------|------|
+| [usage-network.md](usage-network.md) | **本机 Local / 局域网 LAN** — 谁在哪访问、URL 怎么配 |
+| [README § 建议部署](../README.md#建议部署) | MCP / bridge / gateway / 手动 |
+| [dependencies.md](dependencies.md) | 依赖与 env |
 
 ```bash
-make dev                    # Engine + Web（默认，MCP 路径）
+make install                # 首次
+make dev                    # Engine + Web（默认）
 make dev WEB_TURN=bridge    # + agent-bridge :8787
 make dev WEB_TURN=gateway   # + gateway sidecar :8642
 ```
 
 接口详解：[agents/README.md](agents/README.md)
 
+## 本机 vs 局域网（速查）
+
+| | **本机 Local** | **局域网 LAN** |
+|--|----------------|----------------|
+| **谁** | 你与 `make dev` 同一台电脑 | 同事 / 手机等同网段设备 |
+| **Web 入口** | http://localhost:5173 | http://\<主机 IP\>:5173 |
+| **`.env`** | 默认 | `NOTION3D_WEB_BASE=http://<IP>:5173` + CORS |
+| **MCP 在本机** | `127.0.0.1:8000` | 同左 |
+| **MCP 在异机** | — | MCP env 用主机 IP（:8000 / :5173） |
+
+`make dev` banner 会打印局域网地址。详见 [usage-network.md](usage-network.md)。
+
 ## 进程与端口
 
-| `WEB_TURN` | 进程 | 端口 |
-|------------|------|------|
-| `off` | API + Web | 8000 / 5173 |
-| `bridge` | + agent-bridge | 8787 |
-| `gateway` | + gateway sidecar | 8642 |
-| （Forge 实时） | ForgeCAD Studio | 5174 |
+| `WEB_TURN` | 进程 | 端口 | 监听 |
+|------------|------|------|------|
+| `off` | API + Web | 8000 / 5173 | API `0.0.0.0` · Web `0.0.0.0`（Vite） |
+| `bridge` | + agent-bridge | 8787 | 127.0.0.1（sidecar 本机） |
+| `gateway` | + gateway sidecar | 8642 | 默认 127.0.0.1 |
+| （Forge 实时） | ForgeCAD Studio | 5174 | 127.0.0.1 |
 
 ## 自检
 
@@ -25,10 +44,6 @@ make dev WEB_TURN=gateway   # + gateway sidecar :8642
 WEB_TURN=off bash scripts/check-dev-stack.sh
 curl -s http://127.0.0.1:8000/health | python3 -m json.tool
 ```
-
-## 局域网
-
-`make dev` banner 打印 `http://<本机 IP>:5173`。分享链接时 `.env` 设置 `NOTION3D_WEB_BASE`；MCP env 中 `NOTION3D_WEB_BASE` 须一致。
 
 ## 兼容旧参数
 

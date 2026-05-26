@@ -5,6 +5,7 @@ WITH_ENV = bash scripts/with-env.sh
 WEB_TURN ?= off
 
 install:
+	@echo "Installing Notion3D stack (Python 3.11+, Node 20+) — see docs/dependencies.md"
 	cd apps/api && $(PYTHON) -m pip install -e .
 	cd apps/mcp-server && $(PYTHON) -m pip install -e .
 	cd apps/agent-bridge && npm install

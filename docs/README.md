@@ -5,6 +5,8 @@
 | 文档 | 说明 |
 |------|------|
 | [../README.md](../README.md) | 项目概览与快速开始 |
+| [usage-network.md](usage-network.md) | **本机 Local / 局域网 LAN** 访问方式 |
+| [dependencies.md](dependencies.md) | 系统要求、模块依赖、LLM 归属、env 索引 |
 | [dev-modes.md](dev-modes.md) | 本地运行（`make dev` / `WEB_TURN`） |
 | [agents/README.md](agents/README.md) | **技术接口**：MCP / Web Turn / 手动 |
 

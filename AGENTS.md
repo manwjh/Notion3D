@@ -15,12 +15,14 @@ Notion3D **不含 LLM**。建模智能由外部 Agent 经**技术接口**（MCP 
 ## 启动
 
 ```bash
-cd apps/forge-runner && npm install   # 首次
+make install                          # Python 3.11+ · Node 20+ · 见 docs/dependencies.md
 make dev                              # MCP + 手动（默认）
 make dev WEB_TURN=bridge              # + 浏览器内对话
 ```
 
 不要用裸 `make api` 代替 `make dev`。
+
+**依赖与 LLM 归属**：[docs/dependencies.md](docs/dependencies.md)
 
 ## Skills（按序）
 
@@ -49,6 +51,7 @@ notion3d_apply_template(...)
 
 ## 延伸阅读
 
+- [docs/dependencies.md](docs/dependencies.md) — 依赖、LLM 归属、环境变量
 - [docs/agents/README.md](docs/agents/README.md) — 接口与部署
 - [docs/agents/openclaw.md](docs/agents/openclaw.md) — MCP 宿主示例（OpenClaw）
 - [docs/architecture.md](docs/architecture.md) — 完整 API / MCP 表

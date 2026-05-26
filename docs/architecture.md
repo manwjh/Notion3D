@@ -25,7 +25,7 @@ Notion3D = **ForgeCAD 装配渲染引擎** + **Web 工作台**。不含 LLM。
 | **Web Turn** | `apps/api/.../agents/` + `apps/agent-bridge` | 浏览器对话 sidecar（`bridge` / `gateway`） |
 | **Forge Runner** | `apps/forge-runner` | ForgeCAD CLI → STL + `parts.json` |
 
-渲染细节见 [cad-backend-v2.md](cad-backend-v2.md)。
+渲染细节见 [cad-backend-v2.md](cad-backend-v2.md)。**依赖、LLM 归属、环境变量**见 [dependencies.md](dependencies.md)。
 
 ## 客户端路径（平行）
 
@@ -110,15 +110,17 @@ Engine 兜底见 [design-pipeline.md](design-pipeline.md)。
 
 ## 环境变量（部署层）
 
+完整索引：[dependencies.md](dependencies.md)
+
 ```env
 NOTION3D_API_BASE=http://127.0.0.1:8000
 NOTION3D_WEB_BASE=http://localhost:5173
 NOTION3D_WEB_TURN=off          # off | bridge | gateway
 
-# bridge
+# bridge — LLM 经 Cursor 云端
 CURSOR_API_KEY=...
 
-# gateway
+# gateway — 当前实现 Hermes；LLM 在 gateway 宿主
 NOTION3D_WEB_TURN_GATEWAY_BASE=http://127.0.0.1:8642
 HERMES_API_SERVER_KEY=...
 ```

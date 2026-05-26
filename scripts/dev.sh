@@ -90,7 +90,7 @@ banner() {
     echo "  Gateway ${NOTION3D_WEB_TURN_GATEWAY_BASE:-http://127.0.0.1:8642}"
   fi
   echo "  API     http://127.0.0.1:8000"
-  echo "  Web     http://localhost:5173"
+  echo "  Web     http://localhost:5173  （本机）"
   local lan_ip=""
   if command -v ipconfig >/dev/null 2>&1; then
     for iface in en0 en1; do

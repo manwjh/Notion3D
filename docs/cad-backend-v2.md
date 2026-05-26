@@ -2,26 +2,28 @@
 
 Notion3D 通过 `apps/forge-runner` 调用本机 ForgeCAD CLI 渲染几何。
 
+依赖总览：[dependencies.md](dependencies.md)
+
 ## 安装
 
 ```bash
 cd apps/forge-runner && npm install
-# 或 make install
+# 或 make install（推荐，一并装 Web / API / MCP）
 ```
 
-依赖声明（`apps/forge-runner/package.json`）：
+**无需**单独安装 ForgeCAD 系统包。依赖来自 npm（GitHub）：
 
 ```json
 "forgecad": "github:symbiontarch/ForgeCAD#mainline"
 ```
 
-CLI 路径：
+安装后 CLI 路径：
 
 ```
 apps/forge-runner/node_modules/forgecad/dist-cli/forgecad.js
 ```
 
-Engine 经 `export-parts.mjs` 调用上述 CLI。
+Engine 经 `export-parts.mjs` 调用上述 CLI。`/health` 字段 `forgecad_available: true` 表示就绪。
 
 ## STL 渲染
 
@@ -39,6 +41,12 @@ MCP：`notion3d_render_forge` → 同上。
 `export-parts.mjs` 会为每个部件解析 `source_ref`（主脚本变量或 `src/` 子文件），写入 `parts.json`，供 Web **部件精修**点选跳转。
 
 ## Forge 实时预览
+
+| 项 | 说明 |
+|----|------|
+| **ForgeCAD Studio** | 与 CLI **同一 npm 包** `forgecad` 内提供 |
+| **端口** | 默认 `127.0.0.1:5174` |
+| **启动** | 首次 `POST .../forge-preview` 时由 Engine 拉起；无需手动装 Studio |
 
 ```
 POST /api/projects/{id}/versions/{v}/forge-preview
@@ -73,7 +81,7 @@ POST /api/projects/{id}/versions/{v}/forge-preview
 ```bash
 make install
 make dev
-curl http://127.0.0.1:8000/health
+curl -s http://127.0.0.1:8000/health | python3 -m json.tool
 ```
 
 期望：`forgecad_available: true`
