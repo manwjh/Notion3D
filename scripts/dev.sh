@@ -1,39 +1,55 @@
 #!/usr/bin/env bash
-# 按集成环境启动本地开发栈：make dev AGENT=<profile>
+# Notion3D local dev — Engine + Web; optional Web Turn sidecar (interface-based).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-AGENT="${1:-}"
+
+# WEB_TURN=off|bridge|gateway  —  AGENT= legacy alias (engine→off, cursor_sdk→bridge, hermes→gateway)
+RAW="${WEB_TURN:-${AGENT:-off}}"
+
+normalize_web_turn() {
+  case "$1" in
+    off | none | engine | "") echo "off" ;;
+    bridge | cursor_sdk) echo "bridge" ;;
+    gateway | hermes) echo "gateway" ;;
+    *)
+      echo "错误: 未知 WEB_TURN/AGENT=$1（可用: off | bridge | gateway）" >&2
+      exit 1
+      ;;
+  esac
+}
+
+WEB_TURN="$(normalize_web_turn "$RAW")"
 
 usage() {
   cat <<'EOF'
-用法: make dev AGENT=<profile>
+用法: make dev [WEB_TURN=<interface>]
 
-  cursor_sdk   默认 — CURSOR_API_KEY + agent-bridge + API + Web（Web 对话）
-  hermes       Hermes gateway + API + Web（Web 对话）
-  engine       仅 API + Web（无 Web 对话；MCP / 外部 Agent 调 Engine）
+  off       默认 — Engine + Web（MCP 外部 Agent + 手动编辑）
+  bridge    附加 agent-bridge :8787（浏览器内 POST /turn）
+  gateway   附加 HTTP Runs gateway :8642（浏览器内 POST /turn）
 
 示例:
-  make dev AGENT=cursor_sdk
-  make dev AGENT=hermes
-  make dev-cursor
+  make dev
+  make dev WEB_TURN=bridge
+  make dev WEB_TURN=gateway
+
+兼容旧参数（将移除）:
+  AGENT=engine → off · AGENT=cursor_sdk → bridge · AGENT=hermes → gateway
 EOF
 }
 
-case "$AGENT" in
-  cursor_sdk | hermes | engine) ;;
-  *)
-    usage
-    exit 1
-    ;;
-esac
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
 
 set -a
 [ -f "$ROOT/.env" ] && . "$ROOT/.env"
 [ -f "$ROOT/apps/api/.env" ] && . "$ROOT/apps/api/.env"
 set +a
 
-export NOTION3D_AGENT_PROVIDER="$AGENT"
+export NOTION3D_WEB_TURN="$WEB_TURN"
 export NOTION3D_REPO_ROOT="$ROOT"
 PYTHON="${PYTHON:-python3.11}"
 export NOTION3D_PYTHON="$PYTHON"
@@ -43,9 +59,9 @@ port_in_use() {
 }
 
 preflight() {
-  if [ "$AGENT" = "cursor_sdk" ]; then
+  if [ "$WEB_TURN" = "bridge" ]; then
     if [ -z "${CURSOR_API_KEY:-}" ]; then
-      echo "错误: AGENT=cursor_sdk 需要 .env 中配置 CURSOR_API_KEY" >&2
+      echo "错误: WEB_TURN=bridge 需要 .env 中配置 CURSOR_API_KEY" >&2
       exit 1
     fi
     if [ ! -d "$ROOT/apps/agent-bridge/node_modules" ]; then
@@ -57,24 +73,21 @@ preflight() {
     fi
   fi
 
-  if [ "$AGENT" = "hermes" ]; then
-    if ! command -v "${NOTION3D_HERMES_BIN:-hermes}" >/dev/null 2>&1; then
-      echo "错误: 未找到 hermes CLI；见 docs/agents/hermes.md" >&2
+  if [ "$WEB_TURN" = "gateway" ]; then
+    if ! command -v "${NOTION3D_WEB_TURN_GATEWAY_BIN:-${NOTION3D_HERMES_BIN:-hermes}}" >/dev/null 2>&1; then
+      echo "错误: WEB_TURN=gateway 需要 gateway CLI 在 PATH；见 docs/agents/web-turn-gateway.md" >&2
       exit 1
-    fi
-    if ! command -v notion3d-mcp >/dev/null 2>&1; then
-      echo "提示: notion3d-mcp 不在 PATH；Hermes 需配置 MCP，见 docs/agents/hermes.md" >&2
     fi
   fi
 }
 
 banner() {
-  echo "Notion3D dev — AGENT=$AGENT"
-  if [ "$AGENT" = "cursor_sdk" ]; then
-    echo "  Bridge  http://127.0.0.1:${NOTION3D_AGENT_BRIDGE_PORT:-8787}"
+  echo "Notion3D dev — WEB_TURN=$WEB_TURN"
+  if [ "$WEB_TURN" = "bridge" ]; then
+    echo "  Bridge  http://127.0.0.1:${NOTION3D_WEB_TURN_BRIDGE_PORT:-8787}"
   fi
-  if [ "$AGENT" = "hermes" ]; then
-    echo "  Hermes  ${NOTION3D_HERMES_API_BASE:-http://127.0.0.1:8642}"
+  if [ "$WEB_TURN" = "gateway" ]; then
+    echo "  Gateway ${NOTION3D_WEB_TURN_GATEWAY_BASE:-http://127.0.0.1:8642}"
   fi
   echo "  API     http://127.0.0.1:8000"
   echo "  Web     http://localhost:5173"
@@ -90,7 +103,9 @@ banner() {
   if [ -n "$lan_ip" ]; then
     echo "          http://${lan_ip}:5173  （局域网）"
   fi
-  [ "$AGENT" = "engine" ] && echo "  （无 Agent sidecar — Web 对话不可用）"
+  if [ "$WEB_TURN" = "off" ]; then
+    echo "  MCP     外部 Agent 宿主配置 notion3d-mcp → Engine（见 docs/agents/README.md）"
+  fi
   echo "Ctrl+C 停止全部；或另开终端 make stop"
 }
 
@@ -111,22 +126,23 @@ wait_http() {
   return 1
 }
 
-start_hermes_gateway() {
-  local port="${NOTION3D_HERMES_API_PORT:-8642}"
+start_gateway() {
+  local port="${NOTION3D_WEB_TURN_GATEWAY_PORT:-8642}"
   if port_in_use "$port"; then
-    echo "Hermes gateway 已在 :$port 运行，跳过启动"
+    echo "Web Turn gateway 已在 :$port 运行，跳过启动"
     return
   fi
 
   export API_SERVER_ENABLED=true
-  if [ -n "${HERMES_API_SERVER_KEY:-${NOTION3D_HERMES_API_KEY:-}}" ]; then
-    export API_SERVER_KEY="${HERMES_API_SERVER_KEY:-${NOTION3D_HERMES_API_KEY}}"
+  if [ -n "${HERMES_API_SERVER_KEY:-${NOTION3D_WEB_TURN_GATEWAY_API_KEY:-${NOTION3D_HERMES_API_KEY:-}}}" ]; then
+    export API_SERVER_KEY="${HERMES_API_SERVER_KEY:-${NOTION3D_WEB_TURN_GATEWAY_API_KEY:-${NOTION3D_HERMES_API_KEY}}}"
   fi
   export API_SERVER_PORT="$port"
-  export API_SERVER_HOST="${NOTION3D_HERMES_API_HOST:-127.0.0.1}"
+  export API_SERVER_HOST="${NOTION3D_WEB_TURN_GATEWAY_HOST:-127.0.0.1}"
 
-  echo "启动 Hermes gateway（:${port}）…"
-  ( "${NOTION3D_HERMES_BIN:-hermes}" gateway ) &
+  local bin="${NOTION3D_WEB_TURN_GATEWAY_BIN:-${NOTION3D_HERMES_BIN:-hermes}}"
+  echo "启动 Web Turn gateway（:${port}）…"
+  ( "$bin" gateway ) &
 }
 
 preflight
@@ -135,14 +151,14 @@ sleep 0.3
 
 trap 'kill 0' INT TERM
 
-if [ "$AGENT" = "cursor_sdk" ]; then
+if [ "$WEB_TURN" = "bridge" ]; then
   ( cd "$ROOT/apps/agent-bridge" && NOTION3D_PYTHON="$PYTHON" npm start ) &
-  wait_http "http://127.0.0.1:${NOTION3D_AGENT_BRIDGE_PORT:-8787}/health" "Bridge :8787" 60 || true
+  wait_http "http://127.0.0.1:${NOTION3D_WEB_TURN_BRIDGE_PORT:-8787}/health" "Bridge :8787" 60 || true
 fi
 
-if [ "$AGENT" = "hermes" ]; then
-  start_hermes_gateway
-  wait_http "${NOTION3D_HERMES_API_BASE:-http://127.0.0.1:8642}/health" "Hermes gateway" 60 || true
+if [ "$WEB_TURN" = "gateway" ]; then
+  start_gateway
+  wait_http "${NOTION3D_WEB_TURN_GATEWAY_BASE:-http://127.0.0.1:8642}/health" "Web Turn gateway" 60 || true
 fi
 
 ( cd "$ROOT/apps/api" && "$PYTHON" -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000 ) &

@@ -261,7 +261,7 @@ async function handleApply() {
           无可调参数，展开下方代码或直接对话修改。
         </p>
         <p v-else-if="selectedPart" class="model-tools-tip model-tools-tip--part">
-          调整部件参数/代码后点「应用更改」。此路径不经过设计助手。
+          调整部件参数/代码后点「应用更改」。
         </p>
 
         <details
@@ -328,7 +328,7 @@ async function handleApply() {
           :disabled="busy || (generating && !forgeMain)"
           @change="onCodeChange"
         />
-        <p class="model-tools-tip">拖动滑块后点「应用更改」。此路径不经过设计助手。</p>
+        <p class="model-tools-tip">拖动滑块后点「应用更改」。</p>
       </template>
       <p v-else class="model-tools-empty">
         当前模型没有可调参数。如需精细控制，可切换到「高级代码」标签，或在对话区描述修改。

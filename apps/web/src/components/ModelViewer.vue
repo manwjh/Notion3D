@@ -12,14 +12,14 @@ const props = withDefaults(
     partsUrl?: string | null;
     loading?: boolean;
     loadingLabel?: string | null;
-    legacyIncomplete?: boolean;
+    versionPending?: boolean;
     pickMode?: boolean;
     pick?: ModelPick | null;
   }>(),
   {
     loading: false,
     loadingLabel: null,
-    legacyIncomplete: false,
+    versionPending: false,
     pickMode: false,
     pick: null,
     partsUrl: null,
@@ -503,10 +503,10 @@ defineExpose({ setPartVisible, setPartOpacity, fitPart, fitAll, highlightPart, l
       </div>
     </div>
 
-    <div v-else-if="legacyIncomplete && !stlUrl" class="viewer-overlay viewer-root viewer-root--legacy">
+    <div v-else-if="versionPending && !stlUrl" class="viewer-overlay viewer-root viewer-root--pending">
       <div class="viewer-empty">
-        <p>此版本缺少 3D 模型</p>
-        <span>这是旧版未完成的数据。请用右上角 ⋯ →「生成可打印模型」补全。</span>
+        <p>此版本尚未生成 3D 网格</p>
+        <span>请用右上角 ⋯ →「生成可打印模型」补全，或重新渲染 Forge 源码。</span>
       </div>
     </div>
 
@@ -553,7 +553,7 @@ defineExpose({ setPartVisible, setPartOpacity, fitPart, fitAll, highlightPart, l
 }
 
 .viewer-root--loading,
-.viewer-root--legacy {
+.viewer-root--pending {
   display: flex;
   align-items: center;
   justify-content: center;

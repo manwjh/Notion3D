@@ -19,7 +19,7 @@ def test_render_forge_accepts_code(client: TestClient, project_id: str, monkeypa
     async def noop_job(job_id: str) -> None:
         return None
 
-    monkeypatch.setattr(job_service, "run_render_forge_job", noop_job)
+    monkeypatch.setattr(job_service, "run_render_job", noop_job)
 
     res = client.post(
         f"/api/projects/{project_id}/render-forge",
@@ -43,7 +43,7 @@ def test_render_forge_accepts_src_files(client: TestClient, project_id: str, mon
         return None
 
     monkeypatch.setattr(job_service, "create_render_job", spy_create)
-    monkeypatch.setattr(job_service, "run_render_forge_job", noop_job)
+    monkeypatch.setattr(job_service, "run_render_job", noop_job)
 
     res = client.post(
         f"/api/projects/{project_id}/render-forge",

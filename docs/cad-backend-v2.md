@@ -72,8 +72,10 @@ POST /api/projects/{id}/versions/{v}/forge-preview
 
 ```bash
 make install
-make dev AGENT=engine
+make dev
 curl http://127.0.0.1:8000/health
 ```
 
 期望：`forgecad_available: true`
+
+完整 Engine API 见 [architecture.md](architecture.md)。

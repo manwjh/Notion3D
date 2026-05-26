@@ -1,7 +1,7 @@
 [project]
 name = "notion3d-mcp"
 version = "0.2.0"
-description = "Notion3D MCP Server — Agent tools for OpenSCAD modeling pipeline"
+description = "Notion3D MCP Server — Agent tools for ForgeCAD modeling pipeline"
 requires-python = ">=3.11"
 dependencies = [
     "mcp>=1.6.0",

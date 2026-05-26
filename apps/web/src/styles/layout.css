@@ -83,6 +83,7 @@
   overflow: hidden;
 }
 
+.workspace--workbench,
 .workspace--agent-first {
   grid-template-columns:
     clamp(240px, 22vw, 300px)
@@ -218,7 +219,8 @@
     display: none;
   }
 
-  .workspace--agent-first {
+  .workspace--workbench,
+.workspace--agent-first {
     grid-template-columns: clamp(200px, 24vw, 260px) minmax(0, 1fr) clamp(280px, 32vw, 360px);
   }
 }

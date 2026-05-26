@@ -1,58 +1,154 @@
-# Notion3D — 对话式 ForgeCAD 装配工作台
+# Notion3D — ForgeCAD 装配工作台
 
-用自然语言描述需求，外部 Agent 写 ForgeCAD 脚本，Engine 渲染多部件装配，Web 三栏预览与导出。
+用自然语言描述需求，外部 Agent 写 ForgeCAD 脚本，Engine 渲染多部件装配，**Web 三栏工作台**预览与导出。
 
-**Notion3D 引擎不含 LLM**；建模智能由外部 Agent（Cursor SDK、Hermes、OpenClaw 等）经 MCP 或 Web 适配层接入。
+**Notion3D 引擎不含 LLM**。建模智能经**技术接口**接入（MCP / 可选 Web Turn）；Web UI 对用户无感——用户只打开工作台，不关心 Agent 叫什么、配在哪。
 
 ## 特性
 
-- **ForgeCAD 装配**：`.forge.js` 多部件、`importAssembly` 多文件 → STL + `parts.json` 分件预览
-- **三栏工作台**：结构（部件树 / 文件 / 参数）· 3D 视口 · 设计助手
-- **部件精修**：点选部件树 → 跳转 Forge 源码片段，支持多文件 `src/`
-- **Forge 实时预览**：本机 ForgeCAD Studio（`:5174`），可调 `param()` 即时看几何
-- **分阶段流水线**：intake → plan → author → render → review（MCP + Skills）
+- **ForgeCAD 装配**：`.forge.js` → STL + `parts.json` 分件预览
+- **三栏工作台**：结构 · 3D 视口 · 对话
+- **部件精修**：部件树 → Forge 源码跳转
+- **Forge 实时预览**：ForgeCAD Studio `:5174`
+- **Design Turn 流水线**：plan → author → render → review
+
+## 架构（一句话）
+
+```
+用户 → Web 工作台 :5173 → Engine :8000 → forge-runner
+                ↑
+Agent 宿主 ── MCP(notion3d-mcp) ──┘          ← 接口 1（默认推荐）
+可选：Web POST /turn → Web Turn sidecar ──────── 接口 2
+可选：Web 左栏手动改 Forge ──────────────────── 接口 3
+```
+
+三条路径**平行**，共用同一 Web 工作台。详见 [docs/architecture.md](docs/architecture.md)。
+
+## 建议部署
+
+按你的使用方式选一种（或组合）。**Notion3D 侧**始终是 `make dev` 起 Engine + Web；差别在是否加 Web Turn、以及 **Agent 宿主侧**是否配 MCP。
+
+### 方案 A — MCP 建模（推荐，含 OpenClaw）
+
+**适合**：在 Agent 宿主里对话建模，Web 只做预览、编辑、导出。
+
+| 层 | 做什么 |
+|----|--------|
+| Notion3D | `make dev`（`WEB_TURN=off`，默认） |
+| Agent 宿主 | 配置 `notion3d-mcp`，env 指向 Engine / Web |
+| 用户 | 宿主内对话 → Web 打开 `http://localhost:5173/p/<project_id>` |
+
+```bash
+make install
+cp .env.example .env   # 填 NOTION3D_WEB_BASE 等
+make dev
+# → Web http://localhost:5173  ·  API http://127.0.0.1:8000
+```
+
+Agent 宿主 MCP env（示例）：
+
+```json
+{
+  "command": "notion3d-mcp",
+  "env": {
+    "NOTION3D_API_BASE": "http://127.0.0.1:8000",
+    "NOTION3D_WEB_BASE": "http://localhost:5173"
+  }
+}
+```
+
+OpenClaw 合并 [config/openclaw-notion3d-mcp.json](config/openclaw-notion3d-mcp.json) → [docs/agents/openclaw.md](docs/agents/openclaw.md)
+
+---
+
+### 方案 B — 浏览器内对话（Web Turn · bridge）
+
+**适合**：用户直接在 Web 右侧「对话」输入，不经外部 Agent 宿主。
+
+| 层 | 做什么 |
+|----|--------|
+| Notion3D | `make dev WEB_TURN=bridge` |
+| 部署层 | `.env` 中 `CURSOR_API_KEY` |
+| 用户 | 打开 Web → 右侧对话 |
+
+```bash
+make install
+cp .env.example .env
+# .env:
+#   CURSOR_API_KEY=crsr_...
+make dev WEB_TURN=bridge
+```
+
+Sidecar：agent-bridge `:8787` → notion3d-mcp → Engine。详见 [docs/agents/web-turn-bridge.md](docs/agents/web-turn-bridge.md)
+
+---
+
+### 方案 C — 浏览器内对话（Web Turn · gateway）
+
+**适合**：已有 HTTP Runs gateway 宿主，希望在 Web 内对话。
+
+| 层 | 做什么 |
+|----|--------|
+| Notion3D | `make dev WEB_TURN=gateway` |
+| 部署层 | gateway CLI + `HERMES_API_SERVER_KEY`；宿主侧 notion3d MCP |
+| 用户 | 打开 Web → 右侧对话 |
+
+```bash
+make install
+cp .env.example .env
+# .env:
+#   HERMES_API_SERVER_KEY=...
+make dev WEB_TURN=gateway
+```
+
+详见 [docs/agents/web-turn-gateway.md](docs/agents/web-turn-gateway.md)
+
+---
+
+### 方案 D — 纯手动（无 Agent）
+
+**适合**：只改 Forge 参数/代码/部件精修，不用自然语言建模。
+
+```bash
+make dev    # 与方案 A 相同栈，不配 MCP 亦可使用左栏编辑
+```
+
+---
+
+### 对照表
+
+| 你想… | 启动 | Notion3D `.env` | Agent 宿主 |
+|-------|------|-----------------|------------|
+| OpenClaw / MCP 建模 | `make dev` | `NOTION3D_WEB_BASE` | 配 `notion3d-mcp` |
+| Web 内对话（bridge） | `make dev WEB_TURN=bridge` | + `CURSOR_API_KEY` | 不需要 |
+| Web 内对话（gateway） | `make dev WEB_TURN=gateway` | + gateway key | gateway 侧 MCP |
+| 只手动改 Forge | `make dev` | 工作台 env | 不需要 |
+
+> Web 对话与 MCP 建模可并存：例如 `make dev WEB_TURN=bridge` 同时在外部宿主用 MCP 调同一 Engine。
 
 ## 快速开始
 
 ```bash
 make install
-make dev AGENT=<cursor_sdk|hermes|engine>   # 按你的 Agent 环境选择，见 docs/agents/README.md
-# → Web http://localhost:5173  ·  API http://127.0.0.1:8000
-# 局域网：http://<本机 IP>:5173（见 make dev 启动输出）
+make dev
 ```
 
-| `AGENT` | 说明 |
-|---------|------|
-| `cursor_sdk` | Web 设计助手 — Cursor SDK |
-| `hermes` | Web 设计助手 — Hermes |
-| `engine` | 仅 Engine / 预览；OpenClaw、IDE MCP、手动改 Forge |
+自检：
 
-不要用裸 `make api` 代替完整 dev 栈。
-
-## 目录
-
+```bash
+curl -s http://127.0.0.1:8000/health | python3 -m json.tool
+# forgecad_available: true · web_turn: off
+WEB_TURN=off bash scripts/check-dev-stack.sh
 ```
-apps/api            Engine（render-forge、jobs、versions）
-apps/web            Vue 3 工作台
-apps/forge-runner   ForgeCAD CLI（npm）
-apps/mcp-server     notion3d MCP
-apps/agent-bridge   Cursor SDK sidecar
-templates/builtin/  Forge 演示模板
-.cursor/skills/     Agent 分阶段 Skills
-docs/               架构与运行文档
-```
+
+不要用裸 `make api` 代替 `make dev`（缺 Web 与 forge-runner 预检）。
 
 ## 文档
 
 | 文档 | 说明 |
 |------|------|
-| [AGENTS.md](AGENTS.md) | Agent / Skills / MCP 速查 |
-| [docs/README.md](docs/README.md) | 完整文档索引 |
-| [docs/agents/README.md](docs/agents/README.md) | **连接 Agent**（按环境选路径） |
-| [docs/agents/hermes.md](docs/agents/hermes.md) | Hermes Web 对话 |
-| [docs/agents/openclaw.md](docs/agents/openclaw.md) | OpenClaw + notion3d-mcp |
-| [docs/architecture.md](docs/architecture.md) | 架构与 API |
-| [docs/cad-backend-v2.md](docs/cad-backend-v2.md) | ForgeCAD 安装与渲染 |
-| [docs/dev-modes.md](docs/dev-modes.md) | 本地运行与自检 |
-
-自检：`curl http://127.0.0.1:8000/health` → `forgecad_available: true`
+| [docs/agents/README.md](docs/agents/README.md) | 三条路径与接口详解 |
+| [docs/architecture.md](docs/architecture.md) | 架构、Engine API、MCP 表 |
+| [AGENTS.md](AGENTS.md) | MCP 工具与 Skills 速查 |
+| [docs/design-pipeline.md](docs/design-pipeline.md) | Design Turn 流水线 |
+| [docs/dev-modes.md](docs/dev-modes.md) | 本地端口与 `WEB_TURN` |

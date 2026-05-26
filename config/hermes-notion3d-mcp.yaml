@@ -1,17 +1,13 @@
-# Notion3D MCP — append to ~/.hermes/config.yaml under mcp_servers:
+# Web Turn gateway 侧 MCP 示例 — 合并到 gateway 宿主 MCP 配置
+# （Hermes 等 HTTP Runs 宿主：~/.hermes/config.yaml → mcp_servers）
 #
-#   notion3d:
-#     command: notion3d-mcp
-#     env:
-#       NOTION3D_API_BASE: http://127.0.0.1:8000
-#       NOTION3D_WEB_BASE: http://localhost:5173
+# Notion3D Engine 须已启动：make dev WEB_TURN=gateway
 #
-# Hermes API server (~/.hermes/.env):
-#
+# gateway API server（~/.hermes/.env 示例）:
 #   API_SERVER_ENABLED=true
 #   API_SERVER_KEY=change-me-local-dev
 #
-# LLM provider keys are configured in Hermes (~/.hermes/config.yaml), not Notion3D.
+# LLM provider keys 在 gateway 宿主配置，不在 Notion3D。
 
 mcp_servers:
   notion3d:

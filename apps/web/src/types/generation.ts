@@ -19,7 +19,6 @@ export type GenerationState = {
 type JobLike = {
   status?: string;
   phase?: string | null;
-  preview_ready?: boolean;
   stl_ready?: boolean;
   version?: number | null;
   message?: string | null;
@@ -28,7 +27,6 @@ type JobLike = {
 
 const PHASE_MAP: Record<string, JobPhase> = {
   pending: "generating",
-  preview: "rendering",
   stl: "rendering",
   done: "done",
   failed: "failed",
@@ -39,7 +37,6 @@ export function phaseFromJob(job: JobLike): JobPhase {
   if (job.status === "succeeded" || job.phase === "done") return "done";
   if (job.phase && PHASE_MAP[job.phase]) return PHASE_MAP[job.phase];
   if (job.stl_ready) return "rendering";
-  if (job.preview_ready) return "rendering";
   return "generating";
 }
 

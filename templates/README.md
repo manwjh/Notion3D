@@ -25,4 +25,10 @@ bash templates/scripts/validate-all.sh
 ## API
 
 - `GET /api/templates?scope=builtin|user|all`
+- `GET /api/templates/{id}`
 - `POST /api/templates/{id}/apply`
+- `POST /api/projects/{id}/versions/{v}/save-template`
+
+MCP：`notion3d_list_templates` · `notion3d_get_template` · `notion3d_apply_template` · `notion3d_save_template`
+
+详见 [docs/architecture.md](../docs/architecture.md)。

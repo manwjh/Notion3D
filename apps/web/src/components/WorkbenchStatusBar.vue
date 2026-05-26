@@ -5,7 +5,6 @@ import type { Health } from "../api/client";
 const props = defineProps<{
   health: Health | null;
   validationWarnings: string[];
-  agentReady: boolean;
 }>();
 
 const forgeStatus = computed(() => {
@@ -22,10 +21,6 @@ const forgeStatus = computed(() => {
     <span>ForgeCAD</span>
     <span class="sep">·</span>
     <span :class="{ warn: !health?.forgecad_available }">{{ forgeStatus }}</span>
-    <span class="sep">·</span>
-    <span :class="agentReady ? 'ok' : 'warn'">
-      {{ agentReady ? "助手已连接" : "助手未连接" }}
-    </span>
     <span v-if="validationWarnings.length" class="workbench-status-warn">
       <span class="sep">·</span>
       {{ validationWarnings.length }} 条校验提示
@@ -49,14 +44,6 @@ const forgeStatus = computed(() => {
 
 .sep {
   opacity: 0.45;
-}
-
-.ok {
-  color: var(--success);
-}
-
-.warn {
-  color: var(--warn);
 }
 
 .workbench-status-warn {

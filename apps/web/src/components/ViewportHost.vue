@@ -11,7 +11,7 @@ withDefaults(
     partsUrl?: string | null;
     loading?: boolean;
     loadingLabel?: string | null;
-    legacyIncomplete?: boolean;
+    versionPending?: boolean;
     pickMode?: boolean;
     pick?: ModelPick | null;
     viewMode?: "assembly" | "forge";
@@ -22,7 +22,7 @@ withDefaults(
   {
     loading: false,
     loadingLabel: null,
-    legacyIncomplete: false,
+    versionPending: false,
     pickMode: false,
     pick: null,
     partsUrl: null,
@@ -86,7 +86,7 @@ defineExpose({
       :parts-url="partsUrl"
       :loading="loading"
       :loading-label="loadingLabel"
-      :legacy-incomplete="legacyIncomplete"
+      :version-pending="versionPending"
       :pick-mode="pickMode"
       :pick="pick"
       @pick="emit('pick', $event)"

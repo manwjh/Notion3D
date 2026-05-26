@@ -1,33 +1,20 @@
-# Notion3D MCP Server
+# notion3d-mcp
 
-Unified Agent integration for **Cursor**, **Claude Code**, and **OpenClaw**.
+**接口 1：MCP** — Agent 宿主通过 `notion3d_*` tools 调 Notion3D Engine。
 
-## Install
-
-```bash
-cd apps/mcp-server
-pip install -e .
-```
-
-Requires API running: `make api`
-
-## Run
+Requires workbench: `make dev`（不要用裸 `make api`）。
 
 ```bash
-make mcp
-# or
-notion3d-mcp
+cd apps/mcp-server && pip install -e .
 ```
 
-## Environment
+MCP env:
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `NOTION3D_API_BASE` | `http://127.0.0.1:8000` | Notion3D API base URL |
-| `NOTION3D_MCP_POLL_MAX` | `600` | Max seconds for `notion3d_wait_job` |
+```json
+{
+  "NOTION3D_API_BASE": "http://127.0.0.1:8000",
+  "NOTION3D_WEB_BASE": "http://localhost:5173"
+}
+```
 
-## Tools
-
-See `notion3d_mcp/server.py` — all tools prefixed with `notion3d_`.
-
-Configuration examples: [docs/integrations/README.md](../../docs/integrations/README.md)
+宿主示例：[docs/agents/openclaw.md](../docs/agents/openclaw.md) · [docs/integrations/README.md](../docs/integrations/README.md)

@@ -32,7 +32,6 @@ class ProjectOut(BaseModel):
 
 class VersionStatus(str, Enum):
     pending = "pending"
-    preview_ready = "preview_ready"
     complete = "complete"
 
 
@@ -71,7 +70,6 @@ class ModelVersionOut(BaseModel):
     stl_url: str | None = None
     parts_url: str | None = None
     forge_url: str | None = None
-    preview_url: str | None = None
     cad_backend: str | None = "forgecad"
     created_at: datetime
     prompt: str | None = None
@@ -150,8 +148,6 @@ class JobOut(BaseModel):
     prompt: str | None = None
     message: str | None = None
     version: int | None = None
-    preview_url: str | None = None
-    preview_ready: bool = False
     stl_ready: bool = False
     error: str | None = None
     validation_warnings: list[str] = Field(default_factory=list)
@@ -233,15 +229,6 @@ class ForgeRenderIn(BaseModel):
     )
 
 
-class AgentProviderOut(BaseModel):
-    id: str
-    title: str
-    kind: str
-    configured: bool
-    ready: bool
-    note: str = ""
-
-
 class AgentStatusOut(BaseModel):
     active: bool
     turn_id: str | None = None
@@ -255,7 +242,7 @@ class AgentStatusOut(BaseModel):
 
 class ProjectCapabilitiesOut(BaseModel):
     web_chat_mode: str  # agent | setup_required
-    assistant_label: str | None = None
+    web_turn: str = "off"
     assistant_ready: bool = False
 
 
@@ -273,12 +260,9 @@ class HealthOut(BaseModel):
     forgecad_available: bool = False
     cad_backend: str = "forgecad"
     web_base_url: str = "http://localhost:5173"
-    agent_provider: str = "cursor_sdk"
-    agent_active: str | None = None
-    agent_bridge_ready: bool = False
-    agent_providers: list[AgentProviderOut] = Field(default_factory=list)
+    web_turn: str = "off"
+    web_turn_ready: bool = False
     web_chat_mode: str = "setup_required"
-    assistant_label: str | None = None
     forge_preview_available: bool = False
     forge_preview_running: bool = False
 

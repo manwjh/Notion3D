@@ -70,8 +70,8 @@ def test_project_state_requires_agent_mode(client, project_id, monkeypatch):
     async def _mark_unready():
         from app.services.agents.registry import _ready_cache
 
-        _ready_cache["cursor_sdk"] = False
-        _ready_cache["hermes"] = False
+        _ready_cache["bridge"] = False
+        _ready_cache["gateway"] = False
 
     monkeypatch.setattr(
         "app.services.capabilities.refresh_provider_cache",

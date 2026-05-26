@@ -1,4 +1,4 @@
-"""Cursor TypeScript SDK — local runtime. Not Cursor IDE."""
+"""Web Turn bridge sidecar — HTTP adapter to local agent runtime + notion3d MCP."""
 
 from __future__ import annotations
 
@@ -12,49 +12,50 @@ from app.services.agents.base import (
     AgentSessionHandle,
 )
 from app.services.agents.prompt import build_agent_prompt
+from app.services.web_turn_config import WEB_TURN_BRIDGE
 
 
 def _configured() -> bool:
-    return bool(settings.cursor_api_key.strip())
+    return bool(settings.web_turn_bridge_api_key.strip())
 
 
 async def _bridge_ready() -> bool:
     if not _configured():
         return False
-    url = f"{settings.cursor_sdk_bridge_base.rstrip('/')}/health"
+    url = f"{settings.web_turn_bridge_base.rstrip('/')}/health"
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             resp = await client.get(url)
         if resp.status_code != 200:
             return False
         data = resp.json()
-        return bool(data.get("cursor_api_ready"))
+        return bool(data.get("api_ready") or data.get("cursor_api_ready"))
     except Exception:
         return False
 
 
-class CursorSdkAdapter(AgentAdapter):
-    """Local @cursor/sdk agent — MCP on 127.0.0.1, no public tunnel."""
+class BridgeAdapter(AgentAdapter):
+    """Web Turn `bridge` — agent-bridge :8787 → notion3d-mcp → Engine."""
 
-    id = "cursor_sdk"
-    title = "Cursor SDK (local)"
-    kind = "local"
+    id = WEB_TURN_BRIDGE
+    title = "Web Turn bridge"
+    kind = "http_sidecar"
 
     def info(self) -> AgentProviderInfo:
-        note = ""
         configured = _configured()
+        note = ""
         if not configured:
-            note = "在 .env 配置 CURSOR_API_KEY（与 Cursor IDE 无关）"
-        elif not settings.cursor_sdk_bridge_base.strip():
-            note = "需配置 NOTION3D_CURSOR_SDK_BRIDGE_BASE"
+            note = "部署层：配置 CURSOR_API_KEY"
+        elif not settings.web_turn_bridge_base.strip():
+            note = "部署层：配置 NOTION3D_WEB_TURN_BRIDGE_BASE"
         else:
-            note = "需运行 make dev AGENT=cursor_sdk 或 make bridge"
+            note = "部署层：make dev WEB_TURN=bridge 或 make bridge"
         return AgentProviderInfo(
             id=self.id,
             title=self.title,
             kind=self.kind,
             configured=configured,
-            ready=False,  # resolved async in registry via refresh if needed
+            ready=False,
             note=note,
         )
 
@@ -62,7 +63,7 @@ class CursorSdkAdapter(AgentAdapter):
         base = self.info()
         base.ready = await _bridge_ready()
         if base.configured and not base.ready and "make bridge" not in base.note:
-            base.note = "需运行 make dev AGENT=cursor_sdk 或 make bridge"
+            base.note = "部署层：make dev WEB_TURN=bridge 或 make bridge"
         return base
 
     def session_key(self, project_id: str) -> str:
@@ -86,14 +87,14 @@ class CursorSdkAdapter(AgentAdapter):
             region=region,
             latest_version=latest_version,
         )
-        url = f"{settings.cursor_sdk_bridge_base.rstrip('/')}/v1/turn"
+        url = f"{settings.web_turn_bridge_base.rstrip('/')}/v1/turn"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 url,
                 json={"agentId": logical_id, "prompt": prompt},
             )
         if resp.status_code >= 400:
-            raise AgentAdapterError(f"SDK bridge {resp.status_code}: {resp.text[:500]}")
+            raise AgentAdapterError(f"Web Turn bridge {resp.status_code}: {resp.text[:500]}")
         data = resp.json()
         return AgentSessionHandle(
             provider=self.id,
@@ -103,7 +104,7 @@ class CursorSdkAdapter(AgentAdapter):
         )
 
     async def run_status(self, handle: AgentSessionHandle) -> str:
-        url = f"{settings.cursor_sdk_bridge_base.rstrip('/')}/v1/runs/{handle.run_id}"
+        url = f"{settings.web_turn_bridge_base.rstrip('/')}/v1/runs/{handle.run_id}"
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get(url)
         if resp.status_code >= 400:
@@ -111,11 +112,11 @@ class CursorSdkAdapter(AgentAdapter):
         return str(resp.json().get("status", "UNKNOWN"))
 
     async def collect_reply(self, handle: AgentSessionHandle) -> str:
-        url = f"{settings.cursor_sdk_bridge_base.rstrip('/')}/v1/runs/{handle.run_id}/wait"
+        url = f"{settings.web_turn_bridge_base.rstrip('/')}/v1/runs/{handle.run_id}/wait"
         async with httpx.AsyncClient(timeout=httpx.Timeout(600.0, connect=10.0)) as client:
             resp = await client.get(url)
         if resp.status_code >= 400:
-            raise AgentAdapterError(f"SDK bridge {resp.status_code}: {resp.text[:500]}")
+            raise AgentAdapterError(f"Web Turn bridge {resp.status_code}: {resp.text[:500]}")
         data = resp.json()
         if data.get("error"):
             raise AgentAdapterError(str(data["error"]))
@@ -125,4 +126,4 @@ class CursorSdkAdapter(AgentAdapter):
         status = str(data.get("status", ""))
         if status == "FINISHED":
             raise AgentAdapterError("Agent 未返回文本回复，请重试或查看预览是否已更新。")
-        raise AgentAdapterError(f"SDK Agent 无回复（status={status}）")
+        raise AgentAdapterError(f"Agent 无回复（status={status}）")

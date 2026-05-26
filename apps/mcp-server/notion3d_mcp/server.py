@@ -1,4 +1,4 @@
-"""Notion3D MCP Server — tools for Cursor Agent, Claude Code, OpenClaw."""
+"""Notion3D MCP Server — Agent hosts integrate via notion3d_* tools."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def notion3d_list_active_jobs(project_id: str) -> str:
 
 @mcp.tool()
 def notion3d_list_versions(project_id: str) -> str:
-    """List model versions including preview_ready (partial) and complete."""
+    """List model versions (pending or complete)."""
     return _out(client.list_versions(project_id))
 
 
@@ -190,12 +190,6 @@ def notion3d_render_forge(
         if not isinstance(files, dict):
             raise ValueError("files_json must be a JSON object")
     return _out(client.render_forge(project_id, forge_code, label=label, files=files))
-
-
-@mcp.tool()
-def notion3d_resume_stl(project_id: str, version: int) -> str:
-    """Resume STL computation for a version that has preview but no STL yet."""
-    return _out(client.resume_stl(project_id, version))
 
 
 @mcp.tool()

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
 import type { Health } from "../api/client";
-import { MODE_LABEL, type WebChatMode } from "../strings/zh";
+import { STATUS } from "../strings/zh";
 
 defineProps<{ health: Health | null }>();
 
@@ -16,11 +16,6 @@ function onDocClick(e: MouseEvent) {
 
 onMounted(() => document.addEventListener("mousedown", onDocClick));
 onUnmounted(() => document.removeEventListener("mousedown", onDocClick));
-
-function modeLabel(health: Health | null) {
-  const mode = (health?.web_chat_mode ?? "setup_required") as WebChatMode;
-  return MODE_LABEL[mode];
-}
 </script>
 
 <template>
@@ -30,8 +25,8 @@ function modeLabel(health: Health | null) {
       class="sys-status-btn"
       :class="`sys-status-btn--${!health ? 'unknown' : health.forgecad_available ? 'ok' : 'warn'}`"
       :aria-expanded="open"
-      aria-label="连接状态"
-      title="连接状态"
+      aria-label="服务状态"
+      title="服务状态"
       @click="open = !open"
     >
       <span
@@ -40,36 +35,22 @@ function modeLabel(health: Health | null) {
         aria-hidden="true"
       />
     </button>
-    <div v-if="open" class="sys-status-popover" role="dialog" aria-label="连接状态">
-      <p class="sys-status-title">连接状态</p>
-      <p v-if="!health" class="sys-status-empty">无法连接服务，请运行 make dev AGENT=… 启动。</p>
+    <div v-if="open" class="sys-status-popover" role="dialog" :aria-label="STATUS.popoverTitle">
+      <p class="sys-status-title">{{ STATUS.popoverTitle }}</p>
+      <p v-if="!health" class="sys-status-empty">{{ STATUS.serviceUnreachable }}</p>
       <ul v-else class="sys-status-list">
+        <li :class="health.status === 'ok' ? 'ok' : 'warn'">
+          <span class="sys-status-item-dot" aria-hidden="true" />
+          <div>
+            <strong>Notion3D</strong>
+            <span>{{ health.status === "ok" ? STATUS.workbenchReady : STATUS.workbenchMissing }}</span>
+          </div>
+        </li>
         <li :class="health.forgecad_available ? 'ok' : 'warn'">
           <span class="sys-status-item-dot" aria-hidden="true" />
           <div>
             <strong>ForgeCAD</strong>
-            <span>{{ health.forgecad_available ? "就绪" : "未安装 — cd apps/forge-runner && npm install" }}</span>
-          </div>
-        </li>
-        <li :class="health.web_chat_mode === 'agent' ? 'ok' : 'warn'">
-          <span class="sys-status-item-dot" aria-hidden="true" />
-          <div>
-            <strong>对话模式</strong>
-            <span>{{ modeLabel(health) }}</span>
-          </div>
-        </li>
-        <li v-if="health.web_chat_mode === 'agent'" class="ok">
-          <span class="sys-status-item-dot" aria-hidden="true" />
-          <div>
-            <strong>设计助手</strong>
-            <span>{{ health.assistant_label ?? "已连接" }}</span>
-          </div>
-        </li>
-        <li v-else class="warn">
-          <span class="sys-status-item-dot" aria-hidden="true" />
-          <div>
-            <strong>设计助手</strong>
-            <span>未连接 — 顶栏「助手」可查看配置</span>
+            <span>{{ health.forgecad_available ? STATUS.forgeReady : STATUS.forgeMissing }}</span>
           </div>
         </li>
       </ul>

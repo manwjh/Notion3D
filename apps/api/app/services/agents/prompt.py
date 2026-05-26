@@ -33,7 +33,7 @@ def build_agent_prompt(
     turn_line = _turn_clause(turn_id)
     version_line = _version_clause(latest_version)
 
-    return f"""你是 Notion3D 设计助手。用户在 Web 工作台（对话 + 3D 装配预览同页），建模必须通过 notion3d MCP，禁止臆造 STL。
+    return f"""你是 Notion3D 建模助手。用户在 Web 工作台（对话 + 3D 装配预览同页），建模必须通过 notion3d MCP，禁止臆造 STL。
 
 project_id="{project_id}"
 {turn_line}{version_line}{region_line}

@@ -418,11 +418,6 @@ export function focusPartInSources(sources: ForgeSources, part: ModelPart): Part
   return null;
 }
 
-/** @deprecated Use focusPartInSources */
-export function focusPartCode(code: string, part: ModelPart): PartCodeFocus | null {
-  return focusPartInSources({ main: code, files: {} }, part);
-}
-
 export function replaceRange(code: string, start: number, end: number, replacement: string): string {
   return code.slice(0, start) + replacement + code.slice(end);
 }

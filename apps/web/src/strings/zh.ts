@@ -1,29 +1,53 @@
-/** User-facing copy — no MCP / env var names in primary UI. */
+/** User-facing copy — agent backend is invisible; no MCP / env / provider names. */
 
 export type WebChatMode = "agent" | "setup_required";
 
-export const MODE_LABEL: Record<WebChatMode, string> = {
-  agent: "已连接",
-  setup_required: "未连接",
-};
+export const CHAT = {
+  panelTitle: "对话",
+  assistantName: "Notion3D",
+  hintReady: "描述需求，生成并更新 3D 模型",
+  hintUnavailable: "自然语言建模暂不可用，可使用左栏编辑模型",
+  checking: "正在连接服务…",
+  processing: "正在建模…",
+  submitChecking: "正在连接服务，请稍候再试",
+  submitUnavailable: "自然语言建模暂不可用，请使用左栏编辑",
+  submitBusy: "上一条仍在处理，请稍候…",
+  onboardingTitle: "用自然语言描述，生成 3D 模型",
+  onboardingBody: "新建项目后在这里描述需求，中间视口会显示模型。",
+  continueTitle: "继续改方案",
+  startTitle: "说说你想做什么",
+  continueHint: "直接描述想改什么。",
+  placeholderNoProject: "先新建项目，然后描述想要的 3D 物件…",
+  placeholderUnavailable: "自然语言建模暂不可用，可使用左栏编辑…",
+  placeholderChecking: "正在连接服务…",
+  placeholderBusy: "正在建模，可先写好下一条…",
+  placeholderPickElement: "说说想怎么改这个部件…",
+  placeholderPick: "说说想怎么改这里…",
+  placeholderHasModel: "继续描述想改什么…",
+  placeholderDefault: "描述你想做的物件…",
+} as const;
 
-export const MODE_HINT: Record<WebChatMode, string> = {
-  agent: "直接描述需求，助手会生成并更新 3D 模型",
-  setup_required: "需先连接设计助手，点击右上角「助手」",
-};
+export const WORKBENCH = {
+  subtitle: "ForgeCAD 装配工作台",
+  viewportEmpty: "新建项目并描述需求，模型会显示在这里",
+  structureEmpty: "创建项目并开始建模后，结构面板会显示在这里。",
+  mobileChatTab: "对话",
+} as const;
 
-export const ASSISTANT_LABEL: Record<string, string> = {
-  cursor_sdk: "Cursor 设计助手",
-  hermes: "Hermes 设计助手",
-};
+export const STATUS = {
+  popoverTitle: "服务状态",
+  serviceUnreachable: "无法连接 Notion3D 服务",
+  forgeReady: "就绪",
+  forgeMissing: "渲染引擎未就绪",
+  workbenchReady: "工作台就绪",
+  workbenchMissing: "服务未连接",
+} as const;
 
 export function assistantDisplayName(
-  activeId: string | null | undefined,
-  fallbackLabel: string | null | undefined,
+  _activeId: string | null | undefined,
+  _fallbackLabel: string | null | undefined,
 ): string {
-  if (fallbackLabel) return fallbackLabel;
-  if (activeId && ASSISTANT_LABEL[activeId]) return ASSISTANT_LABEL[activeId];
-  return "设计助手";
+  return CHAT.assistantName;
 }
 
 export const DESIGN_PHASE_LABEL: Record<string, string> = {

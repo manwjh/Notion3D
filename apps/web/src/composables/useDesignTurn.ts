@@ -34,7 +34,7 @@ export function mergeSessionPhase(
   if (agentBusy || activeTurn?.agent_phase === "running") {
     return {
       phase: "generating",
-      detail: "助手处理中…",
+      detail: "正在建模…",
       busy: true,
       lane: "agent",
       designPhase: designPhase ?? "intake",

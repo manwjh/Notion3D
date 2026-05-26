@@ -2,7 +2,7 @@
   "name": "notion3d-agent-bridge",
   "version": "0.1.0",
   "private": true,
-  "description": "Notion3D bridge to @cursor/sdk local runtime",
+  "description": "Notion3D Web Turn bridge sidecar (@cursor/sdk local runtime)",
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js"

@@ -20,10 +20,9 @@ import WorkbenchStatusBar from "../components/WorkbenchStatusBar.vue";
 import ChatPanel from "../components/ChatPanel.vue";
 import GenerationOverlay from "../components/GenerationOverlay.vue";
 import NewProjectModal from "../components/NewProjectModal.vue";
-import AssistantSetupPanel from "../components/AssistantSetupPanel.vue";
-import AgentStatusBar from "../components/AgentStatusBar.vue";
 import ProjectLinkButton from "../components/ProjectLinkButton.vue";
 import SystemStatusButton from "../components/SystemStatusButton.vue";
+import { WORKBENCH } from "../strings/zh";
 import type { ModelPart } from "../types/parts";
 import { useActiveJob } from "../composables/useActiveJob";
 import { useProjectRoute } from "../composables/useProjectRoute";
@@ -38,7 +37,6 @@ const selectedVersion = ref<number | null>(null);
 const followLatestVersion = ref(true);
 const sysHealth = ref<Health | null>(null);
 const showNewProject = ref(false);
-const showSetup = ref(false);
 const creatingProject = ref(false);
 const pickMode = ref(false);
 const modelPick = ref<ModelPick | null>(null);
@@ -298,7 +296,8 @@ const jobBusy = computed(() => generation.value?.busy ?? false);
 const versionIncomplete = computed(
   () =>
     Boolean(
-      active.value?.status === "preview_ready" &&
+      active.value?.status === "pending" &&
+        active.value.forge_url &&
         !active.value.stl_url,
     ),
 );
@@ -433,8 +432,6 @@ const designContext = computed(() =>
 
 const currentProject = computed(() => projects.value.find((p) => p.id === projectId.value));
 
-const agentReady = computed(() => sysHealth.value?.web_chat_mode === "agent");
-
 const selectedProjectId = computed({
   get: () => projectId.value ?? "",
   set: (v: string) => {
@@ -488,9 +485,8 @@ const editorVersion = computed(() =>
         <div class="brand-mark" aria-hidden="true"><span /><span /><span /></div>
         <div class="brand-text">
           <strong class="brand-title">Notion3D</strong>
-          <span class="brand-subtitle">对话式 CAD 工作台</span>
+          <span class="brand-subtitle">{{ WORKBENCH.subtitle }}</span>
         </div>
-        <AgentStatusBar :agent-ready="agentReady" />
       </div>
       <div class="topbar-actions">
         <div class="project-picker">
@@ -501,9 +497,6 @@ const editorVersion = computed(() =>
           </select>
         </div>
         <button type="button" class="btn-secondary" @click="showNewProject = true">新建</button>
-        <button type="button" class="btn-ghost btn-ghost--compact" @click="showSetup = true">
-          助手
-        </button>
         <ProjectLinkButton
           :project-id="projectId"
           :web-url="currentProject?.web_url"
@@ -536,7 +529,7 @@ const editorVersion = computed(() =>
         :class="{ active: mobilePanel === 'chat' }"
         @click="mobilePanel = 'chat'"
       >
-        助手
+        {{ WORKBENCH.mobileChatTab }}
       </button>
     </nav>
 
@@ -559,7 +552,7 @@ const editorVersion = computed(() =>
     />
 
     <main
-      class="workspace workspace--agent-first"
+      class="workspace workspace--workbench"
       :class="{
         'workspace--narrow': narrowLayout,
         'workspace--show-structure': !narrowLayout || mobilePanel === 'structure',
@@ -603,7 +596,7 @@ const editorVersion = computed(() =>
           <div class="viewer-root viewer-empty">
             <div class="viewer-empty-icon" aria-hidden="true"><span /><span /><span /></div>
             <p>3D 视口</p>
-            <span>新建项目并在右侧与设计助手对话，模型会显示在这里</span>
+            <span>{{ WORKBENCH.viewportEmpty }}</span>
           </div>
         </template>
 
@@ -622,7 +615,7 @@ const editorVersion = computed(() =>
               :parts-url="displayPartsUrl"
               :loading="viewerLoading"
               :loading-label="viewerLoadingLabel"
-              :legacy-incomplete="versionIncomplete && !jobBusy"
+              :version-pending="versionIncomplete && !jobBusy"
               :pick-mode="pickMode"
               :pick="modelPick"
               :view-mode="previewViewMode"
@@ -664,7 +657,6 @@ const editorVersion = computed(() =>
           @clear-pick="modelPick = null"
           @turn-complete="onTurnComplete"
           @track-job="onTrackJob"
-          @open-setup="showSetup = true"
           @select-version="onSelectVersion"
         />
       </aside>
@@ -673,7 +665,6 @@ const editorVersion = computed(() =>
     <WorkbenchStatusBar
       :health="sysHealth"
       :validation-warnings="activeValidationWarnings"
-      :agent-ready="agentReady"
     />
 
     <NewProjectModal
@@ -682,7 +673,5 @@ const editorVersion = computed(() =>
       @close="showNewProject = false"
       @submit="handleCreateProject"
     />
-
-    <AssistantSetupPanel :open="showSetup" :health="sysHealth" @close="showSetup = false" />
   </div>
 </template>

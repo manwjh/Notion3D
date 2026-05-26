@@ -1,6 +1,6 @@
 /**
- * Notion3D ↔ @cursor/sdk local runtime bridge (HTTP).
- * Not Cursor IDE — programmatic local agents with notion3d MCP.
+ * Notion3D Web Turn bridge — HTTP sidecar to local agent runtime + notion3d MCP.
+ * Uses @cursor/sdk programmatically (not Cursor IDE).
  */
 
 const http = require("http");
@@ -158,9 +158,9 @@ async function handleHealth(_req, res) {
   }
   sendJson(res, 200, {
     status: "ok",
-    runtime: "cursor_sdk_local",
-    cursor_api_key: Boolean(API_KEY),
-    cursor_api_ready: keyOk,
+    runtime: "bridge",
+    api_key_configured: Boolean(API_KEY),
+    api_ready: keyOk,
     repo_root: REPO_ROOT,
     model: MODEL,
     mcp_python: MCP_PYTHON,
@@ -247,5 +247,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`notion3d-agent-bridge http://127.0.0.1:${PORT} (sdk local)`);
+  console.log(`notion3d-agent-bridge http://127.0.0.1:${PORT} (web turn bridge)`);
 });

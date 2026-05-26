@@ -1,4 +1,4 @@
-"""Hermes agent adapter tests."""
+"""Web Turn gateway adapter tests."""
 
 from __future__ import annotations
 
@@ -6,11 +6,11 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from app.services.agents.base import AgentSessionHandle
-from app.services.agents.hermes import HermesAdapter
+from app.services.agents.gateway_adapter import GatewayAdapter
 
 
 def test_start_turn_posts_run():
-    adapter = HermesAdapter()
+    adapter = GatewayAdapter()
     mock_resp = MagicMock()
     mock_resp.status_code = 202
     mock_resp.json.return_value = {"run_id": "run-1", "status": "started"}
@@ -20,10 +20,10 @@ def test_start_turn_posts_run():
     mock_client.__aenter__ = AsyncMock(return_value=mock_client)
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
-    with patch("app.services.agents.hermes.httpx.AsyncClient", return_value=mock_client):
+    with patch("app.services.agents.gateway_adapter.httpx.AsyncClient", return_value=mock_client):
         handle = asyncio.run(adapter.start_turn("proj-1", "20mm 立方体"))
 
-    assert handle.provider == "hermes"
+    assert handle.provider == "gateway"
     assert handle.run_id == "run-1"
     assert handle.session_id == "notion3d-proj-1"
     mock_client.post.assert_awaited_once()
@@ -33,7 +33,7 @@ def test_start_turn_posts_run():
 
 
 def test_collect_reply_returns_output():
-    adapter = HermesAdapter()
+    adapter = GatewayAdapter()
     done_resp = MagicMock()
     done_resp.status_code = 200
     done_resp.json.return_value = {"status": "completed", "output": "模型已生成"}
@@ -44,12 +44,12 @@ def test_collect_reply_returns_output():
     mock_client.__aexit__ = AsyncMock(return_value=None)
 
     handle = AgentSessionHandle(
-        provider="hermes",
+        provider="gateway",
         session_id="notion3d-p1",
         run_id="run-1",
     )
 
-    with patch("app.services.agents.hermes.httpx.AsyncClient", return_value=mock_client):
+    with patch("app.services.agents.gateway_adapter.httpx.AsyncClient", return_value=mock_client):
         reply = asyncio.run(adapter.collect_reply(handle))
 
     assert reply == "模型已生成"

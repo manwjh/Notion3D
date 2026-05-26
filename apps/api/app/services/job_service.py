@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from app.models.schemas import JobSource, JobStatus, MessageRole
 from app.services import design_turn, forgecad_service, job_store, storage
-from app.services.cad_backend import CadBackend, source_filename
+from app.services.cad_backend import CadBackend, SOURCE_FILENAME
 from app.services.cad_types import CadError
 
 _jobs: dict[str, dict] = {}
@@ -26,8 +26,6 @@ def _new_job(**fields) -> dict:
         "checkpoint": "pending",
         "message": None,
         "version": None,
-        "preview_url": None,
-        "preview_ready": False,
         "stl_ready": False,
         "forge_code": None,
         "forge_files": None,
@@ -126,10 +124,6 @@ def _set_version_status(project_id: str, version: int, status: str) -> None:
     _write_version_meta(project_id, version, meta)
 
 
-def _preview_api(project_id: str, version: int) -> str:
-    return f"/api/projects/{project_id}/versions/{version}/preview.png"
-
-
 async def _ensure_version_files(
     project_id: str,
     job_id: str,
@@ -147,8 +141,7 @@ async def _ensure_version_files(
         update_job(job_id, version=version, checkpoint="version_created")
 
     out_dir = storage.version_dir(project_id, version)
-    source_name = source_filename()
-    (out_dir / source_name).write_text(forge_code, encoding="utf-8")
+    (out_dir / SOURCE_FILENAME).write_text(forge_code, encoding="utf-8")
 
     meta = _read_version_meta(project_id, version)
     job = get_job(job_id)
@@ -283,7 +276,7 @@ async def run_render_job(job_id: str) -> None:
         forge_code = job.get("forge_code") or ""
 
         if not forge_code.strip() and job.get("version"):
-            source_path = storage.version_dir(project_id, job["version"]) / "model.forge.js"
+            source_path = storage.version_dir(project_id, job["version"]) / SOURCE_FILENAME
             if source_path.exists():
                 forge_code = source_path.read_text(encoding="utf-8")
 
@@ -321,14 +314,9 @@ async def run_render_job(job_id: str) -> None:
             _finalize_job(project_id, job_id, job)
 
 
-async def run_render_forge_job(job_id: str) -> None:
-    await run_render_job(job_id)
-
-
 async def resume_version_stl(project_id: str, version: int) -> dict:
     out_dir = storage.version_dir(project_id, version)
-    meta = _read_version_meta(project_id, version)
-    source_path = out_dir / "model.forge.js"
+    source_path = out_dir / SOURCE_FILENAME
     stl_path = out_dir / "model.stl"
 
     if not source_path.exists():
@@ -349,13 +337,10 @@ async def resume_version_stl(project_id: str, version: int) -> dict:
         label=f"恢复 v{version} STL",
         forge_files=forge_files or None,
     )
-    preview_path = out_dir / "preview.png"
     update_job(
         job["id"],
         version=version,
-        preview_ready=preview_path.exists(),
-        preview_url=_preview_api(project_id, version) if preview_path.exists() else None,
-        checkpoint="preview_done" if preview_path.exists() else "version_created",
+        checkpoint="version_created",
         message="恢复计算 3D 网格…",
     )
     return get_job(job["id"]) or job
@@ -375,7 +360,7 @@ async def resume_interrupted_jobs() -> None:
         for version in range(1, project.latest_version + 1):
             out_dir = storage.version_dir(project.id, version)
             stl_path = out_dir / "model.stl"
-            forge_path = out_dir / "model.forge.js"
+            forge_path = out_dir / SOURCE_FILENAME
             if stl_path.exists() or not forge_path.exists():
                 continue
             if job_store.find_active_job_for_version(project.id, version):
@@ -386,14 +371,10 @@ async def resume_interrupted_jobs() -> None:
                 continue
 
             meta = _read_version_meta(project.id, version)
-            status = meta.get("status", "pending")
-            if status == "complete":
+            if meta.get("status") == "complete":
                 continue
 
-            source_path = out_dir / "model.forge.js"
-            if not source_path.exists():
-                continue
-            forge_code = source_path.read_text(encoding="utf-8")
+            forge_code = forge_path.read_text(encoding="utf-8")
             forge_files = forgecad_service.collect_src_files(out_dir)
             job = create_render_job(
                 project.id,
@@ -401,13 +382,10 @@ async def resume_interrupted_jobs() -> None:
                 label=f"恢复 v{version}",
                 forge_files=forge_files or None,
             )
-            preview_path = out_dir / "preview.png"
             update_job(
                 job["id"],
                 version=version,
-                preview_ready=preview_path.exists(),
-                preview_url=_preview_api(project.id, version) if preview_path.exists() else None,
-                checkpoint="preview_done" if preview_path.exists() else "version_created",
+                checkpoint="version_created",
                 message="恢复未完成版本…",
             )
             asyncio.create_task(run_render_job(job["id"]))

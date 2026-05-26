@@ -16,13 +16,11 @@ from app.services.agents import (
     refresh_provider_cache,
     resolve_adapter_live,
 )
+from app.services.web_turn_config import normalize_web_turn
 
 logger = logging.getLogger(__name__)
 
-BLOCKED_NO_AGENT = (
-    "Web 对话需要连接设计助手。"
-    "Cursor：make dev AGENT=cursor_sdk；Hermes：make dev AGENT=hermes。"
-)
+BLOCKED_NO_AGENT = "自然语言建模暂不可用，请使用左栏编辑模型。"
 
 
 def format_user_text(body: AgentTurnIn) -> str:
@@ -45,7 +43,7 @@ async def finish_agent_run(project_id: str, pending: dict) -> None:
         storage.append_message(
             project_id,
             MessageRole.system,
-            "设计助手连接异常，请重试。",
+            "建模服务异常，请重试。",
             turn_id=turn_id,
         )
         if turn_id:
@@ -78,7 +76,7 @@ async def finish_agent_run(project_id: str, pending: dict) -> None:
         storage.append_message(
             project_id,
             MessageRole.system,
-            f"设计助手处理失败：{exc}",
+            f"建模失败：{exc}",
             turn_id=turn_id,
         )
         if turn_id:
@@ -107,7 +105,8 @@ async def handle_turn(
     await refresh_provider_cache()
 
     meta = storage.load_meta(project_id)
-    adapter = await resolve_adapter_live(meta.get("agent_provider"))
+    meta_turn = meta.get("web_turn") or meta.get("agent_provider")
+    adapter = await resolve_adapter_live(normalize_web_turn(meta_turn) if meta_turn else None)
     latest_version = meta.get("latest_version")
 
     if not adapter:
@@ -171,7 +170,7 @@ async def handle_turn(
         msg = storage.append_message(
             project_id,
             MessageRole.system,
-            f"设计助手暂时不可用：{exc}",
+            f"自然语言建模暂不可用：{exc}",
             turn_id=turn_id,
         )
         design_turn.set_agent_failed(project_id, turn_id)

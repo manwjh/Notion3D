@@ -1,3 +1,1 @@
-"""Notion3D MCP Server — unified Agent integration for Cursor, Claude Code, OpenClaw."""
-
-__version__ = "0.2.0"
+"""Notion3D MCP Server — interface 1: Agent hosts call Engine via notion3d_* tools."""

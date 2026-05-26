@@ -12,9 +12,8 @@ import type {
 import { getJob, getProjectState, sendTurn } from "../api/client";
 import { mergeSessionPhase, sleep } from "../composables/useDesignTurn";
 import {
+  CHAT,
   DESIGN_PHASE_LABEL,
-  MODE_HINT,
-  MODE_LABEL,
   assistantDisplayName,
   type WebChatMode,
 } from "../strings/zh";
@@ -60,7 +59,6 @@ const emit = defineEmits<{
   clearPick: [];
   turnComplete: [];
   trackJob: [job: Job, prompt: string];
-  openSetup: [];
   selectVersion: [version: number];
   agentBusyChange: [busy: boolean];
 }>();
@@ -69,7 +67,6 @@ const messages = ref<ChatMessage[]>([]);
 const input = ref("");
 const sending = ref(false);
 const agentBusy = ref(false);
-const agentExternalUrl = ref<string | null>(null);
 const submitError = ref<string | null>(null);
 const capabilities = ref<ProjectCapabilities | null>(null);
 const bottomRef = ref<HTMLElement | null>(null);
@@ -83,18 +80,15 @@ const chatMode = computed<WebChatMode | null>(() => {
 });
 
 const assistantChecking = computed(() => chatMode.value === null);
-const modeLabel = computed(() =>
-  assistantChecking.value ? "检测中" : MODE_LABEL[chatMode.value ?? "setup_required"],
-);
-const modeHint = computed(() =>
+const chatHint = computed(() =>
   assistantChecking.value
-    ? "正在检测设计助手连接…"
-    : MODE_HINT[chatMode.value ?? "setup_required"],
+    ? CHAT.checking
+    : chatMode.value === "agent"
+      ? CHAT.hintReady
+      : CHAT.hintUnavailable,
 );
 
-const assistantName = computed(() =>
-  assistantDisplayName(props.health?.agent_active, props.health?.assistant_label),
-);
+const assistantName = computed(() => assistantDisplayName(null, null));
 
 const session = computed(() =>
   mergeSessionPhase(
@@ -129,7 +123,7 @@ const activityLabel = computed(() => {
   if (session.value.lane === "agent") {
     const dp = session.value.designPhase;
     if (dp && DESIGN_PHASE_LABEL[dp]) return DESIGN_PHASE_LABEL[dp];
-    return "助手处理中…";
+    return CHAT.processing;
   }
   return null;
 });
@@ -175,14 +169,14 @@ function roleLabel(m: ChatMessage): string {
 }
 
 const inputPlaceholder = computed(() => {
-  if (!props.projectId) return "先新建项目，然后描述想要的 3D 物件…";
-  if (chatMode.value === "setup_required") return "请先连接设计助手（右上角「助手」）…";
-  if (assistantChecking.value) return "正在检测助手连接…";
-  if (anyBusy.value && !sending.value) return "助手处理中，可先写好下一条…";
-  if (props.pick?.element) return "说说想怎么改这个部件…";
-  if (props.pick) return "说说想怎么改这里…";
-  if (props.hasModel) return "继续描述想改什么…";
-  return "描述你想做的物件…";
+  if (!props.projectId) return CHAT.placeholderNoProject;
+  if (chatMode.value === "setup_required") return CHAT.placeholderUnavailable;
+  if (assistantChecking.value) return CHAT.placeholderChecking;
+  if (anyBusy.value && !sending.value) return CHAT.placeholderBusy;
+  if (props.pick?.element) return CHAT.placeholderPickElement;
+  if (props.pick) return CHAT.placeholderPick;
+  if (props.hasModel) return CHAT.placeholderHasModel;
+  return CHAT.placeholderDefault;
 });
 
 watch(agentBusy, (v) => emit("agentBusyChange", v), { immediate: true });
@@ -205,7 +199,6 @@ async function refreshMessages(projectId: string) {
 async function hydrateProject(projectId: string) {
   try {
     const state = await refreshMessages(projectId);
-    agentExternalUrl.value = state.agent.external_url ?? null;
     if (state.agent.active) {
       const lastUser = [...state.messages].reverse().find((m) => m.role === "user");
       void pollAgentRun(projectId, lastUser?.content ?? "");
@@ -222,7 +215,6 @@ watch(
       messages.value = [];
       submitError.value = null;
       agentBusy.value = false;
-      agentExternalUrl.value = null;
       return;
     }
     void hydrateProject(pid);
@@ -269,7 +261,6 @@ async function pollAgentRun(projectId: string, prompt: string) {
     while (Date.now() < deadline) {
       const state = await getProjectState(projectId);
       const st = state.agent;
-      if (st.external_url) agentExternalUrl.value = st.external_url;
       if (st.active_job_id && !tracked) {
         tracked = true;
         const job = state.active_job ?? (await getJob(projectId, st.active_job_id));
@@ -287,21 +278,17 @@ async function submitText(text: string) {
   if (!props.projectId || !text.trim() || sending.value) return;
   if (chatMode.value !== "agent") {
     submitError.value =
-      chatMode.value === null
-        ? "正在检测助手连接，请稍候再试"
-        : "请先连接设计助手";
-    if (chatMode.value === "setup_required") emit("openSetup");
+      chatMode.value === null ? CHAT.submitChecking : CHAT.submitUnavailable;
     return;
   }
   if (anyBusy.value) {
-    submitError.value = "助手还在处理上一条，请稍等…";
+    submitError.value = CHAT.submitBusy;
     return;
   }
 
   const prompt = text.trim();
   sending.value = true;
   submitError.value = null;
-  agentExternalUrl.value = null;
 
   try {
     const turn = await sendTurn(
@@ -365,8 +352,7 @@ defineExpose({ focusInput, prefillFromPick });
   <div class="chat-panel">
     <header class="chat-header">
       <div class="chat-header-main">
-        <h2>设计助手</h2>
-        <span class="chat-mode-badge" :title="modeHint">{{ modeLabel }}</span>
+        <h2>{{ CHAT.panelTitle }}</h2>
         <span v-if="designPhaseBadge" class="chat-design-phase-badge">{{ designPhaseBadge }}</span>
       </div>
       <span v-if="activityLabel" class="chat-status chat-status--busy">
@@ -396,31 +382,17 @@ defineExpose({ focusInput, prefillFromPick });
     <div class="chat-panel-notices">
       <DesignContextBanner v-if="designContext" :context="designContext" />
       <div v-if="submitError" class="chat-error-banner" role="alert">{{ submitError }}</div>
-
-      <div
-        v-if="chatMode === 'setup_required' && projectId"
-        class="chat-mode-banner"
-        role="status"
-      >
-        设计助手未连接，无法对话建模。
-        <button type="button" class="link-btn" @click="emit('openSetup')">连接助手</button>
-      </div>
-
-      <div v-if="agentExternalUrl" class="chat-mode-banner" role="status">
-        外部会话：
-        <a :href="agentExternalUrl" target="_blank" rel="noopener">查看详情</a>
-      </div>
     </div>
 
     <div class="chat-messages">
       <div v-if="!projectId" class="chat-onboarding">
-        <p class="chat-hint-title">用自然语言描述，助手生成 3D 模型</p>
-        <p class="chat-hint">新建项目后直接在这里对话，中间视口会显示 3D 模型。</p>
+        <p class="chat-hint-title">{{ CHAT.onboardingTitle }}</p>
+        <p class="chat-hint">{{ CHAT.onboardingBody }}</p>
       </div>
 
       <div v-else-if="messages.length === 0 && !anyBusy" class="chat-onboarding">
-        <p class="chat-hint-title">{{ hasModel ? "继续改方案" : "说说你想做什么" }}</p>
-        <p class="chat-hint">{{ hasModel ? "直接描述修改，助手会更新模型。" : modeHint }}</p>
+        <p class="chat-hint-title">{{ hasModel ? CHAT.continueTitle : CHAT.startTitle }}</p>
+        <p class="chat-hint">{{ hasModel ? CHAT.continueHint : chatHint }}</p>
       </div>
 
       <div

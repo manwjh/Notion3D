@@ -89,9 +89,6 @@ class Notion3DClient:
             f"/api/projects/{project_id}/versions/{version}/forge-sources",
         )
 
-    def resume_stl(self, project_id: str, version: int) -> dict:
-        return self.request("POST", f"/api/projects/{project_id}/versions/{version}/resume-stl")
-
     def wait_job(
         self,
         project_id: str,

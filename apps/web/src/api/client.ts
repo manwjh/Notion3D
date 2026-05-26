@@ -27,8 +27,6 @@ export type Job = {
   prompt?: string | null;
   message: string | null;
   version: number | null;
-  preview_url?: string | null;
-  preview_ready?: boolean;
   stl_ready?: boolean;
   error?: string | null;
   validation_warnings?: string[];
@@ -37,7 +35,7 @@ export type Job = {
   updated_at: string;
 };
 
-export type VersionStatus = "pending" | "preview_ready" | "complete";
+export type VersionStatus = "pending" | "complete";
 
 export type ModelVersion = {
   version: number;
@@ -45,7 +43,6 @@ export type ModelVersion = {
   stl_url: string | null;
   parts_url: string | null;
   forge_url: string | null;
-  preview_url: string | null;
   cad_backend?: string | null;
   created_at: string;
   prompt: string | null;
@@ -64,15 +61,6 @@ export type ModelVersion = {
   forge_sources_url?: string | null;
 };
 
-export type AgentProvider = {
-  id: string;
-  title: string;
-  kind: string;
-  configured: boolean;
-  ready: boolean;
-  note?: string;
-};
-
 export type WebChatMode = "agent" | "setup_required";
 
 export type Health = {
@@ -82,12 +70,9 @@ export type Health = {
   forge_preview_running?: boolean;
   cad_backend?: string;
   web_base_url?: string;
-  agent_provider?: string;
-  agent_active?: string | null;
-  agent_bridge_ready?: boolean;
-  agent_providers?: AgentProvider[];
+  web_turn?: "off" | "bridge" | "gateway";
+  web_turn_ready?: boolean;
   web_chat_mode?: WebChatMode;
-  assistant_label?: string | null;
 };
 
 export type AgentRun = {
@@ -147,7 +132,7 @@ export type AgentStatus = {
 
 export type ProjectCapabilities = {
   web_chat_mode: WebChatMode;
-  assistant_label: string | null;
+  web_turn?: string;
   assistant_ready: boolean;
 };
 

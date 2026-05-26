@@ -1,15 +1,16 @@
-"""Agent adapter registry — cursor_sdk + hermes."""
+"""Web Turn sidecar adapters — bridge + gateway."""
 
 from __future__ import annotations
 
 from app.config import settings
-from app.services.agents.base import AgentAdapter, AgentProviderInfo
-from app.services.agents.cursor_sdk import CursorSdkAdapter
-from app.services.agents.hermes import HermesAdapter
+from app.services.agents.base import AgentAdapter
+from app.services.agents.bridge_adapter import BridgeAdapter
+from app.services.agents.gateway_adapter import GatewayAdapter
+from app.services.web_turn_config import WEB_TURN_BRIDGE, WEB_TURN_GATEWAY, WEB_TURN_OFF, normalize_web_turn
 
 _ADAPTERS: dict[str, AgentAdapter] = {
-    "cursor_sdk": CursorSdkAdapter(),
-    "hermes": HermesAdapter(),
+    WEB_TURN_BRIDGE: BridgeAdapter(),
+    WEB_TURN_GATEWAY: GatewayAdapter(),
 }
 
 _ready_cache: dict[str, bool | None] = {aid: None for aid in _ADAPTERS}
@@ -17,43 +18,13 @@ _ready_cache: dict[str, bool | None] = {aid: None for aid in _ADAPTERS}
 
 async def _refresh_adapter_ready(adapter_id: str) -> bool:
     adapter = _ADAPTERS[adapter_id]
-    if hasattr(adapter, "info_ready"):
-        info = await adapter.info_ready()
-        ready = info.ready
-    else:
-        ready = adapter.info().ready
-    _ready_cache[adapter_id] = ready
-    return ready
+    info = await adapter.info_ready()
+    _ready_cache[adapter_id] = info.ready
+    return info.ready
 
 
-def _adapter_ready_sync(adapter: AgentAdapter) -> bool:
-    cached = _ready_cache.get(adapter.id)
-    if cached is not None:
-        return cached
-    return adapter.info().ready
-
-
-def get_adapter(provider_id: str) -> AgentAdapter | None:
-    return _ADAPTERS.get(provider_id)
-
-
-def list_provider_info() -> list[AgentProviderInfo]:
-    providers: list[AgentProviderInfo] = []
-    for adapter in _ADAPTERS.values():
-        info = adapter.info()
-        ready = _adapter_ready_sync(adapter)
-        note = "" if ready else info.note
-        providers.append(
-            AgentProviderInfo(
-                id=info.id,
-                title=info.title,
-                kind=info.kind,
-                configured=info.configured,
-                ready=ready,
-                note=note,
-            )
-        )
-    return providers
+def get_adapter(adapter_id: str) -> AgentAdapter | None:
+    return _ADAPTERS.get(adapter_id)
 
 
 async def refresh_provider_cache() -> None:
@@ -61,26 +32,27 @@ async def refresh_provider_cache() -> None:
         await _refresh_adapter_ready(adapter_id)
 
 
+def _configured_web_turn(preferred: str | None = None) -> str:
+    raw = preferred if preferred is not None else settings.web_turn
+    return normalize_web_turn(raw)
+
+
 def resolve_adapter(preferred: str | None = None) -> AgentAdapter | None:
-    choice = (preferred or settings.agent_provider or "cursor_sdk").strip().lower()
-    if choice in ("engine", "none", "off"):
-        return None
-    adapter = _ADAPTERS.get(choice)
-    if not adapter:
+    choice = _configured_web_turn(preferred)
+    if choice == WEB_TURN_OFF:
         return None
     if _ready_cache.get(choice) is not True:
         return None
-    return adapter
+    return _ADAPTERS.get(choice)
 
 
 async def resolve_adapter_live(preferred: str | None = None) -> AgentAdapter | None:
-    """Refresh sidecar readiness and resolve adapter (Web turn entry)."""
     await refresh_provider_cache()
     adapter = resolve_adapter(preferred)
     if adapter:
         return adapter
-    choice = (preferred or settings.agent_provider or "cursor_sdk").strip().lower()
-    if choice in ("engine", "none", "off") or choice not in _ADAPTERS:
+    choice = _configured_web_turn(preferred)
+    if choice == WEB_TURN_OFF or choice not in _ADAPTERS:
         return None
     if _ready_cache.get(choice) is False:
         return None
@@ -89,11 +61,10 @@ async def resolve_adapter_live(preferred: str | None = None) -> AgentAdapter | N
 
 
 def bridge_ready() -> bool:
-    """Sidecar / gateway for the active configured provider."""
-    choice = (settings.agent_provider or "cursor_sdk").strip().lower()
-    if choice == "hermes":
-        return _ready_cache.get("hermes") is True
-    return _ready_cache.get("cursor_sdk") is True
+    choice = settings.normalized_web_turn
+    if choice not in _ADAPTERS:
+        return False
+    return _ready_cache.get(choice) is True
 
 
 def active_provider_id(preferred: str | None = None) -> str | None:

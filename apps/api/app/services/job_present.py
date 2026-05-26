@@ -42,8 +42,6 @@ def job_to_out(job: dict) -> JobOut:
         prompt=job.get("prompt"),
         message=job.get("message"),
         version=job.get("version"),
-        preview_url=job.get("preview_url"),
-        preview_ready=bool(job.get("preview_ready")),
         stl_ready=bool(job.get("stl_ready")),
         error=error,
         validation_warnings=job.get("validation_warnings") or [],

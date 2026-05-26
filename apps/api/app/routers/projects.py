@@ -51,10 +51,6 @@ def _version_meta(out_dir) -> dict:
 def _version_status(out_dir, meta: dict) -> VersionStatus:
     if meta.get("status") == "complete" or (out_dir / "model.stl").exists():
         return VersionStatus.complete
-    if meta.get("status") == "preview_ready" or (out_dir / "preview.png").exists():
-        return VersionStatus.preview_ready
-    if (out_dir / "model.forge.js").exists():
-        return VersionStatus.pending
     return VersionStatus.pending
 
 
@@ -106,11 +102,6 @@ def _version_out(project_id: str, v: int, out_dir) -> ModelVersionOut:
         forge_url=(
             f"/api/projects/{project_id}/versions/{v}/model.forge.js"
             if forge.exists()
-            else None
-        ),
-        preview_url=(
-            f"/api/projects/{project_id}/versions/{v}/preview.png"
-            if (out_dir / "preview.png").exists()
             else None
         ),
         created_at=_version_created_at(out_dir),
@@ -191,7 +182,7 @@ async def render_forge(
         job = job_service.get_job(job["id"]) or job
     if turn_id:
         design_turn.register_job(project_id, turn_id, job["id"], prompt=body.label)
-    background_tasks.add_task(job_service.run_render_forge_job, job["id"])
+    background_tasks.add_task(job_service.run_render_job, job["id"])
     return _job_to_out(job)
 
 
@@ -223,9 +214,8 @@ async def list_versions(project_id: str) -> list[ModelVersionOut]:
     for v in range(1, project.latest_version + 1):
         out_dir = storage.version_dir(project_id, v)
         forge = out_dir / "model.forge.js"
-        preview = out_dir / "preview.png"
         stl = out_dir / "model.stl"
-        if not forge.exists() and not preview.exists() and not stl.exists():
+        if not forge.exists() and not stl.exists():
             continue
         versions.append(_version_out(project_id, v, out_dir))
     return versions
@@ -327,14 +317,6 @@ async def download_forge(project_id: str, version: int) -> FileResponse:
     if not path.exists():
         raise HTTPException(status_code=404, detail="Forge 源码不存在")
     return FileResponse(path, media_type="text/javascript", filename=f"model_v{version}.forge.js")
-
-
-@router.get("/{project_id}/versions/{version}/preview.png")
-async def download_preview(project_id: str, version: int) -> FileResponse:
-    path = storage.version_dir(project_id, version) / "preview.png"
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="预览图不存在")
-    return FileResponse(path, media_type="image/png")
 
 
 @router.post("/{project_id}/versions/{version}/save-template", response_model=TemplateOut)
