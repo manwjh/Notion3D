@@ -8,6 +8,7 @@
 
 - **ForgeCAD 装配**：`.forge.js` 多部件、`importAssembly` 多文件 → STL + `parts.json` 分件预览
 - **三栏工作台**：结构（部件树 / 文件 / 参数）· 3D 视口 · 设计助手
+- **部件精修**：点选部件树 → 跳转 Forge 源码片段，支持多文件 `src/`
 - **Forge 实时预览**：本机 ForgeCAD Studio（`:5174`），可调 `param()` 即时看几何
 - **分阶段流水线**：intake → plan → author → render → review（MCP + Skills）
 
@@ -47,10 +48,11 @@ docs/               架构与运行文档
 |------|------|
 | [AGENTS.md](AGENTS.md) | Agent / Skills / MCP 速查 |
 | [docs/README.md](docs/README.md) | 完整文档索引 |
+| [docs/agents/README.md](docs/agents/README.md) | **连接 Agent**（按环境选路径） |
+| [docs/agents/hermes.md](docs/agents/hermes.md) | Hermes Web 对话 |
+| [docs/agents/openclaw.md](docs/agents/openclaw.md) | OpenClaw + notion3d-mcp |
 | [docs/architecture.md](docs/architecture.md) | 架构与 API |
 | [docs/cad-backend-v2.md](docs/cad-backend-v2.md) | ForgeCAD 安装与渲染 |
 | [docs/dev-modes.md](docs/dev-modes.md) | 本地运行与自检 |
-| [docs/agents/README.md](docs/agents/README.md) | 连接 Agent（cursor_sdk / hermes / OpenClaw） |
-| [docs/agents/openclaw.md](docs/agents/openclaw.md) | OpenClaw + notion3d-mcp |
 
 自检：`curl http://127.0.0.1:8000/health` → `forgecad_available: true`

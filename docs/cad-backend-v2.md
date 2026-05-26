@@ -6,6 +6,7 @@ Notion3D 通过 `apps/forge-runner` 调用本机 ForgeCAD CLI 渲染几何。
 
 ```bash
 cd apps/forge-runner && npm install
+# 或 make install
 ```
 
 依赖声明（`apps/forge-runner/package.json`）：
@@ -35,6 +36,8 @@ POST /api/projects/{id}/render-forge
 
 MCP：`notion3d_render_forge` → 同上。
 
+`export-parts.mjs` 会为每个部件解析 `source_ref`（主脚本变量或 `src/` 子文件），写入 `parts.json`，供 Web **部件精修**点选跳转。
+
 ## Forge 实时预览
 
 ```
@@ -44,14 +47,26 @@ POST /api/projects/{id}/versions/{v}/forge-preview
   → Web iframe（Vite 代理 /forge-preview）
 ```
 
+左栏调 `param()` 后同步 forge-preview，可在 **Forge 实时** 视口即时看几何变化。
+
 ## 产物
 
 | 文件 | 说明 |
 |------|------|
-| `model.forge.js` | 源脚本 |
+| `model.forge.js` | 主脚本 |
+| `src/*.forge.js` | 可选子模块（`importAssembly`） |
 | `model.stl` | 合并网格 |
-| `parts.json` | 部件清单 |
+| `parts.json` | 部件清单（含 `source_ref` 可选） |
 | `parts/{id}.stl` | 分件网格 |
+
+`parts.json` 示例字段：
+
+| 字段 | 说明 |
+|------|------|
+| `id` / `label` | 部件标识与显示名 |
+| `stl_url` | 分件 STL 路径 |
+| `color` / `opacity` | 渲染样式（Shell 默认半透明） |
+| `source_ref` | 源码位置（主脚本或 `src/` 文件），供部件精修 |
 
 ## 自检
 
