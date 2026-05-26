@@ -16,7 +16,7 @@
 - **三栏工作台**：结构 · 3D 视口 · 对话
 - **部件精修**：部件树 → Forge 源码跳转
 - **Forge 实时预览**：ForgeCAD Studio `:5174`
-- **Design Turn 流水线**：plan → author → render → review
+- **Render-first 建模**：render → 迭代 → 可选 plan/review 归档
 
 ## 架构（一句话）
 

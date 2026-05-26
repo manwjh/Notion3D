@@ -46,6 +46,23 @@ let pointer = new THREE.Vector2();
 let pointerDown = { x: 0, y: 0 };
 const CLICK_MOVE_THRESHOLD = 6;
 
+type PartRole = "shell" | "internal" | "lid" | "external" | "other";
+
+function materialForRole(role: PartRole | undefined) {
+  switch (role) {
+    case "shell":
+      return { metalness: 0.58, roughness: 0.3 };
+    case "lid":
+      return { metalness: 0.52, roughness: 0.34 };
+    case "external":
+      return { metalness: 0.42, roughness: 0.38 };
+    case "internal":
+      return { metalness: 0.06, roughness: 0.52 };
+    default:
+      return { metalness: 0.18, roughness: 0.42 };
+  }
+}
+
 function alignGeometryOnBuildPlate(geometry: THREE.BufferGeometry) {
   geometry.rotateX(-Math.PI / 2);
   geometry.computeBoundingBox();
@@ -195,12 +212,13 @@ async function loadPartsManifest(url: string) {
       const geo = await loader.loadAsync(`${part.stl_url}?v=${encodeURIComponent(part.id)}`);
       geo.computeVertexNormals();
       const opacity = part.opacity ?? 1;
+      const surface = materialForRole(part.role);
       const partMesh = new THREE.Mesh(
         geo,
         new THREE.MeshStandardMaterial({
           color: part.color,
-          metalness: 0.12,
-          roughness: 0.45,
+          metalness: surface.metalness,
+          roughness: surface.roughness,
           transparent: opacity < 1,
           opacity,
         }),
@@ -234,12 +252,13 @@ async function loadStl(url: string) {
     const loader = new STLLoader();
     const geo = await loader.loadAsync(url);
     alignGeometryOnBuildPlate(geo);
+    const surface = materialForRole("other");
     mesh = new THREE.Mesh(
       geo,
       new THREE.MeshStandardMaterial({
-        color: "#6ea8fe",
-        metalness: 0.12,
-        roughness: 0.45,
+        color: "#9ea3ab",
+        metalness: surface.metalness,
+        roughness: surface.roughness,
       }),
     );
     mesh.castShadow = true;
@@ -316,7 +335,11 @@ function initThree() {
   scene.background = new THREE.Color("#141820");
   camera = new THREE.PerspectiveCamera(45, 1, 0.1, 10000);
   camera.position.set(120, 90, 120);
-  renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+  renderer = new THREE.WebGLRenderer({
+    antialias: true,
+    powerPreference: "high-performance",
+    preserveDrawingBuffer: true,
+  });
   renderer.shadowMap.enabled = true;
   renderer.domElement.style.width = "100%";
   renderer.domElement.style.height = "100%";
@@ -453,7 +476,36 @@ function fitAll() {
   else if (mesh) fitCameraToObject(mesh);
 }
 
-defineExpose({ setPartVisible, setPartOpacity, fitPart, fitAll, highlightPart, loadedParts });
+function captureScreenshot(): string | null {
+  if (!renderer || !scene || !camera || !canvasHost.value) return null;
+  if (!props.stlUrl && !props.partsUrl) return null;
+  if (!modelRoot && !mesh) return null;
+
+  resizeRenderer();
+  controls?.update();
+  renderer.render(scene, camera);
+
+  const canvas = renderer.domElement;
+  if (canvas.width <= 0 || canvas.height <= 0) return null;
+
+  try {
+    const dataUrl = canvas.toDataURL("image/png");
+    if (!dataUrl || dataUrl.length < 128) return null;
+    return dataUrl;
+  } catch {
+    return null;
+  }
+}
+
+defineExpose({
+  setPartVisible,
+  setPartOpacity,
+  fitPart,
+  fitAll,
+  highlightPart,
+  loadedParts,
+  captureScreenshot,
+});
 </script>
 
 <template>

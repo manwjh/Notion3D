@@ -97,6 +97,8 @@ Agent 宿主配置 **notion3d-mcp** 指向 Engine：
 
 浏览器内对话时，外部脚本或第二 Agent 可用 MCP **`notion3d_wait_agent`** 等待本轮 Web Turn 结束（SSE + 轮询降级）；快照用 **`notion3d_get_project_state`**。详见 [web-turn-bridge.md § MCP 辅助工具](web-turn-bridge.md#mcp-辅助工具web-turn)。
 
+Web 对话还支持：**附截图**（视口截取 / 粘贴 / 选文件，最多 3 张）。`WEB_TURN=bridge` 时经 `@cursor/sdk` 传入 Agent 视觉通道；Agent 应结合 `wait_job` 的 **`spatial_summary`** / **`validation_warnings`** 做 review。`gateway` 模式暂仅文本提示，视觉以 MCP 摘要为主。
+
 ## 接口 3：手动编辑
 
 `make dev` 即可。Web 左栏改 Forge 参数/代码/部件精修，不经 LLM。

@@ -19,13 +19,17 @@ function lineNumberAt(code, offset) {
   return code.slice(0, offset).split("\n").length;
 }
 
-function extractReturnExpression(source) {
-  const match = source.match(/return\s+([\s\S]+?)\s*;?\s*$/);
+export function extractReturnExpression(source) {
+  const trimmed = source.trimEnd();
+  const returnIdx = trimmed.lastIndexOf("return");
+  if (returnIdx === -1) return null;
+  const tail = trimmed.slice(returnIdx);
+  const match = tail.match(/^return\s+([\s\S]+?)\s*;?\s*$/);
   if (!match) return null;
   return {
-    preamble: source.slice(0, match.index).trimEnd(),
+    preamble: trimmed.slice(0, returnIdx).trimEnd(),
     expr: match[1].trim().replace(/;\s*$/, ""),
-    returnStart: match.index,
+    returnStart: returnIdx,
   };
 }
 

@@ -1,0 +1,16 @@
+{
+  "id": "sketch-enclosure",
+  "title": "草图拉伸盒体（空心壳）",
+  "description": "能力模板 sketch_extrude_shell：constrainedSketch + extrude + subtract 内腔",
+  "tags": ["enclosure", "shell", "forge", "recipe-sketch_extrude_shell"],
+  "category": "enclosure",
+  "format": "forge",
+  "license": "MIT",
+  "params": [
+    { "name": "Outer Width", "label": "Outer Width", "default": 90, "unit": "mm" },
+    { "name": "Outer Length", "label": "Outer Length", "default": 60, "unit": "mm" },
+    { "name": "Outer Height", "label": "Outer Height", "default": 40, "unit": "mm" },
+    { "name": "Wall", "label": "Wall", "default": 2.5, "unit": "mm" },
+    { "name": "Corner Fillet", "label": "Corner Fillet", "default": 2, "unit": "mm" }
+  ]
+}

@@ -14,6 +14,9 @@ router = APIRouter(prefix="/api/projects", tags=["design"])
 
 
 def _start_agent(project_id: str, pending: dict, background_tasks: BackgroundTasks) -> None:
+    from app.services import agent_activity
+
+    background_tasks.add_task(agent_activity.sync_agent_activity_loop, project_id)
     background_tasks.add_task(turn_service.finish_agent_run, project_id, pending)
 
 

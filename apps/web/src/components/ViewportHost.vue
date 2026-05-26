@@ -39,6 +39,7 @@ defineExpose({
   fitPart: (id: string) => viewerRef.value?.fitPart(id),
   fitAll: () => viewerRef.value?.fitAll(),
   highlightPart: (id: string | null) => viewerRef.value?.highlightPart(id),
+  captureScreenshot: () => viewerRef.value?.captureScreenshot() ?? null,
   applyPartDefaults: (parts: ModelPart[]) => {
     for (const part of parts) {
       if (part.opacity != null && part.opacity < 1) {

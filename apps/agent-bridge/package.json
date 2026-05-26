@@ -5,7 +5,8 @@
   "description": "Notion3D Web Turn bridge sidecar (@cursor/sdk local runtime)",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "@cursor/sdk": "^1.0.13"

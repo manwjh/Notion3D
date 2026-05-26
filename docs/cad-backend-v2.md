@@ -17,6 +17,10 @@ cd apps/forge-runner && npm install
 "forgecad": "github:symbiontarch/ForgeCAD#mainline"
 ```
 
+安装后 `postinstall` 会：
+1. 将 `vendor/solver-pkg/` 复制到 `node_modules/forgecad/solver/pkg/`（GitHub 包不含 WASM）
+2. 修补 `dist-cli/forgecad.js`：`export stl/3mf` 会初始化 WASM 求解器，并修正 Node 下 solver 模块路径
+
 安装后 CLI 路径：
 
 ```
@@ -34,7 +38,12 @@ POST /api/projects/{id}/render-forge
   → forgecad export stl ...
   → model.stl + parts/*.stl + parts.json
   → Web 装配预览 + 部件树
+  → validate-assembly + forge-capability → validation_warnings（`装配校验：` / `建模建议：` — 可选改进）
+  → geometry_recipes.json（来自 plan）+ assembly_digest.capability（正向特征摘要）
+  → assembly_digest（spatial_summary，供 Agent review / wait_job）
 ```
+
+`assembly_spec.json` 由 Engine 在 render 前从 design plan 写入版本目录；校验规则见 `apps/forge-runner/validate-assembly-spec.mjs`。
 
 MCP：`notion3d_render_forge` → 同上。
 

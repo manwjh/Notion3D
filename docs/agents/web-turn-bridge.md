@@ -86,5 +86,5 @@ Web POST /turn → Engine → bridge :8787 → Cursor Agent + notion3d-mcp → E
 | 现象 | 检查 |
 |------|------|
 | `dev.sh` 报未安装 MCP | `cd apps/mcp-server && pip install -e .` |
-| `api_ready: false` | `CURSOR_API_KEY` 有效；`curl bridge/health` |
+| `api_ready: false` | bridge 未启动或未配置 `CURSOR_API_KEY`；`api_key_verified: false` 时再查 Key |
 | `web_chat_mode: setup_required` | bridge 进程是否运行；`NOTION3D_WEB_TURN_BRIDGE_BASE` |

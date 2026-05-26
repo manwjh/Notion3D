@@ -1,0 +1,14 @@
+{
+  "id": "loft-hull",
+  "title": "流线壳体（loft 放样）",
+  "description": "能力模板 loft：spline2d 截面 + loft 多站位，适合圆润外形",
+  "tags": ["loft", "hull", "forge", "recipe-loft"],
+  "category": "industrial",
+  "format": "forge",
+  "license": "MIT",
+  "params": [
+    { "name": "Length", "label": "Length", "default": 92, "unit": "mm" },
+    { "name": "Beam", "label": "Beam", "default": 42, "unit": "mm" },
+    { "name": "Hull Height", "label": "Hull Height", "default": 34, "unit": "mm" }
+  ]
+}

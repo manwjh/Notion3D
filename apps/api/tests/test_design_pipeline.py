@@ -23,7 +23,7 @@ def test_design_plan_advances_to_author(client, project_id):
     assert body["plan"]["summary"] == "40mm 参数化立方体"
 
 
-def test_design_plan_class_c_blocks(client, project_id):
+def test_design_plan_class_c_still_authoring(client, project_id):
     design_turn.begin_turn(project_id, "msg-2", turn_id="turn-2")
 
     res = client.post(
@@ -31,12 +31,12 @@ def test_design_plan_class_c_blocks(client, project_id):
         json={
             "turn_id": "turn-2",
             "task_class": "C",
-            "summary": "卡通角色不适合 ForgeCAD",
-            "strategy": "chat_only",
+            "summary": "卡通角色简模",
+            "strategy": "from_scratch",
         },
     )
     assert res.status_code == 200
-    assert res.json()["design_phase"] == "blocked"
+    assert res.json()["design_phase"] == "author"
 
 
 def test_design_plan_chat_only_marks_done(client, project_id):
@@ -123,7 +123,7 @@ def test_design_review_retry_blocked_after_max(client, project_id):
         design_phase="review",
         render_phase="done",
         job_ids=["j1"],
-        revision=2,
+        revision=8,
     )
 
     res = client.post(
@@ -149,7 +149,7 @@ def test_design_review_last_retry_warns(client, project_id):
         design_phase="review",
         render_phase="done",
         job_ids=["j1"],
-        revision=1,
+        revision=7,
     )
 
     res = client.post(
@@ -162,7 +162,7 @@ def test_design_review_last_retry_warns(client, project_id):
         },
     )
     assert res.status_code == 200
-    assert res.json()["revision"] == 2
+    assert res.json()["revision"] == 8
 
     messages = storage.list_messages(project_id)
     assert any("最后一次自动迭代" in m.get("content", "") for m in messages)
@@ -215,6 +215,7 @@ def test_turn_out_heals_stale_render_phase(project_id):
 
 def test_turn_out_heals_stale_agent_phase(project_id):
     design_turn.begin_turn(project_id, "msg-11", turn_id="turn-11")
+    design_turn.register_job(project_id, "turn-11", "job-11", prompt="测试")
     design_turn._patch_turn(
         project_id,
         agent_phase="running",
@@ -224,3 +225,4 @@ def test_turn_out_heals_stale_agent_phase(project_id):
     turn = design_turn.turn_out(project_id, active_job=None)
     assert turn is not None
     assert turn.agent_phase == "replied"
+    assert turn.render_phase == "running"

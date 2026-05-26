@@ -53,6 +53,7 @@ class AgentAdapter(ABC):
         region: str | None = None,
         turn_id: str | None = None,
         latest_version: int | None = None,
+        images: list[dict[str, str]] | None = None,
     ) -> AgentSessionHandle: ...
 
     @abstractmethod

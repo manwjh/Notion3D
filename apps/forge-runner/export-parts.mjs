@@ -10,7 +10,10 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { resolvePartSourceRef } from "./part-source.mjs";
+import { resolvePartSourceRef, extractReturnExpression } from "./part-source.mjs";
+import { validateAssemblyFromDir } from "./validate-assembly.mjs";
+import { analyzeForgeCapabilityFromDir } from "./forge-capability.mjs";
+import { roleForPartLabel } from "./validate-assembly-spec.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,6 +29,14 @@ const PART_COLORS = [
   "#34495E",
   "#16A085",
 ];
+
+const ROLE_COLORS = {
+  shell: "#B5B8BE",
+  lid: "#9EA3AB",
+  external: "#8B9199",
+  internal: "#6EA8FE",
+  other: null,
+};
 
 function slugify(name) {
   return name
@@ -84,18 +95,10 @@ function parsePartLines(exportOutput) {
   return parts;
 }
 
-function extractReturnExpression(source) {
-  const match = source.match(/return\s+([\s\S]+?)\s*;?\s*$/);
-  if (!match) {
-    return { preamble: source, expr: "null" };
-  }
-  const expr = match[1].trim().replace(/;\s*$/, "");
-  const preamble = source.slice(0, match.index).trimEnd();
-  return { preamble, expr };
-}
-
 function wrapForPart(source, partName) {
-  const { preamble, expr } = extractReturnExpression(source);
+  const ret = extractReturnExpression(source);
+  const preamble = ret?.preamble ?? source;
+  const expr = ret?.expr ?? "null";
   return `${preamble}
 
 function __notion3d_flatten(value, out) {
@@ -190,6 +193,16 @@ function main() {
 
   const usedIds = new Set();
   const manifestParts = [];
+  const assemblySpec = (() => {
+    const specPath = path.join(outDir, "assembly_spec.json");
+    if (!fs.existsSync(specPath)) return [];
+    try {
+      const parsed = JSON.parse(fs.readFileSync(specPath, "utf8"));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
 
   for (let i = 0; i < parsedParts.length; i += 1) {
     const { name } = parsedParts[i];
@@ -217,18 +230,41 @@ function main() {
     }
 
     const sourceRef = resolvePartSourceRef(source, name, id, srcFiles);
+    const role = roleForPartLabel(name, assemblySpec);
+    const roleColor = ROLE_COLORS[role] || null;
 
     manifestParts.push({
       id,
       label: name,
-      color: PART_COLORS[i % PART_COLORS.length],
+      role,
+      color: roleColor || PART_COLORS[i % PART_COLORS.length],
       stl_url: `/api/projects/${projectId}/versions/${version}/parts/${id}.stl`,
-      opacity: name.toLowerCase().includes("shell") ? 0.35 : 1.0,
+      opacity: role === "shell" || name.toLowerCase().includes("shell") ? 0.35 : 1.0,
       ...(sourceRef ? { source_ref: sourceRef } : {}),
     });
   }
 
-  const manifest = { parts: manifestParts, backend: "forgecad" };
+  const assembly = validateAssemblyFromDir(outDir, manifestParts);
+  const capability = analyzeForgeCapabilityFromDir(outDir);
+  const allWarnings = [...new Set([...assembly.warnings, ...capability.warnings])];
+
+  const manifest = {
+    parts: manifestParts,
+    backend: "forgecad",
+    assembly: {
+      spec: assemblySpec,
+      warnings: allWarnings,
+      capability: capability.capability,
+      bboxes: assembly.bboxes.map((entry) => ({
+        id: entry.id,
+        label: entry.label,
+        min: entry.bbox.min,
+        max: entry.bbox.max,
+        center: entry.bbox.center,
+        size: entry.bbox.size,
+      })),
+    },
+  };
   fs.writeFileSync(path.join(outDir, "parts.json"), JSON.stringify(manifest, null, 2), "utf-8");
 
   const summary = {
@@ -236,6 +272,7 @@ function main() {
     objects: parsedParts.length,
     parts: manifestParts.map((p) => ({ id: p.id, label: p.label })),
     combined_stl: combinedStl,
+    assembly_warnings: allWarnings,
   };
   console.log(JSON.stringify(summary));
 }

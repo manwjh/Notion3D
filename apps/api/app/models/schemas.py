@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class JobStatus(str, Enum):
@@ -115,10 +115,34 @@ class ModelPickIn(BaseModel):
     element: str | None = None
 
 
+class TurnImageIn(BaseModel):
+    data: str = Field(min_length=1, max_length=4_000_000)
+    mime_type: str = Field(default="image/png", max_length=64)
+    filename: str | None = Field(default=None, max_length=128)
+
+
 class AgentTurnIn(BaseModel):
-    content: str = Field(min_length=1, max_length=8000)
+    content: str = Field(default="", max_length=8000)
     pick: ModelPickIn | None = None
     region: str | None = Field(default=None, max_length=64)
+    images: list[TurnImageIn] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def validate_content_or_images(self) -> "AgentTurnIn":
+        has_text = bool(self.content.strip())
+        has_images = bool(self.images)
+        if not has_text and not has_images:
+            raise ValueError("content 与 images 不能同时为空")
+        if not has_text:
+            object.__setattr__(self, "content", "请查看截图并检查当前模型。")
+        return self
+
+
+class ChatImageOut(BaseModel):
+    id: str
+    url: str
+    mime_type: str
+    filename: str | None = None
 
 
 class ChatMessageOut(BaseModel):
@@ -128,6 +152,7 @@ class ChatMessageOut(BaseModel):
     created_at: datetime
     turn_id: str | None = None
     job_id: str | None = None
+    images: list[ChatImageOut] = Field(default_factory=list)
 
 
 class JobSource(str, Enum):
@@ -151,6 +176,7 @@ class JobOut(BaseModel):
     stl_ready: bool = False
     error: str | None = None
     validation_warnings: list[str] = Field(default_factory=list)
+    spatial_digest: dict | None = None
     created_at: datetime
     updated_at: datetime
     web_url: str | None = None
@@ -193,6 +219,45 @@ class DesignTurnOut(BaseModel):
     review_notes: list[str] = Field(default_factory=list)
 
 
+class PlanFidelity(str, Enum):
+    layout_only = "layout_only"
+    printable = "printable"
+    decorative = "decorative"
+
+
+class AssemblyModuleRole(str, Enum):
+    shell = "shell"
+    internal = "internal"
+    lid = "lid"
+    external = "external"
+    other = "other"
+
+
+class AssemblyModuleSpec(BaseModel):
+    id: str = Field(min_length=1, max_length=64)
+    role: AssemblyModuleRole = AssemblyModuleRole.other
+    contains: list[str] = Field(default_factory=list, max_length=32)
+    anchor: str | None = Field(default=None, max_length=64)
+    hinge: str | None = Field(default=None, max_length=128)
+
+
+class GeometryRecipeKind(str, Enum):
+    sketch_extrude = "sketch_extrude"
+    sketch_extrude_shell = "sketch_extrude_shell"
+    loft = "loft"
+    sweep = "sweep"
+    revolve = "revolve"
+    union_bracket = "union_bracket"
+    primitive_shell = "primitive_shell"
+    primitive_layout = "primitive_layout"
+
+
+class PartGeometryRecipe(BaseModel):
+    part_id: str = Field(min_length=1, max_length=64)
+    recipe: GeometryRecipeKind
+    notes: str | None = Field(default=None, max_length=500)
+
+
 class DesignPlanIn(BaseModel):
     turn_id: str | None = None
     task_class: TaskClass
@@ -200,8 +265,49 @@ class DesignPlanIn(BaseModel):
     strategy: PlanStrategy
     template_id: str | None = Field(default=None, max_length=64)
     params: dict[str, float] | None = None
-    modules: list[str] = Field(default_factory=list)
+    modules: list[str] = Field(default_factory=list, max_length=64)
+    assembly_spec: list[AssemblyModuleSpec] = Field(default_factory=list, max_length=64)
+    geometry_recipes: list[PartGeometryRecipe] = Field(default_factory=list, max_length=64)
     assumptions: list[str] = Field(default_factory=list)
+    fidelity: PlanFidelity | None = None
+    high_fidelity_requested: bool | None = None
+
+    @model_validator(mode="after")
+    def validate_geometry_recipes(self) -> "DesignPlanIn":
+        if not self.geometry_recipes:
+            return self
+        spec_ids = {m.id for m in self.assembly_spec} if self.assembly_spec else set(self.modules)
+        for entry in self.geometry_recipes:
+            if spec_ids and entry.part_id not in spec_ids:
+                raise ValueError(
+                    f"geometry_recipes: part_id {entry.part_id} 不在 assembly_spec/modules 中"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def validate_assembly_spec(self) -> "DesignPlanIn":
+        if not self.assembly_spec:
+            return self
+        ids = {module.id for module in self.assembly_spec}
+        for module in self.assembly_spec:
+            for child_id in module.contains:
+                if child_id not in ids:
+                    raise ValueError(
+                        f"assembly_spec: {module.id}.contains 引用未知部件 {child_id}"
+                    )
+            if module.anchor and module.anchor not in ids:
+                raise ValueError(
+                    f"assembly_spec: {module.id}.anchor 引用未知部件 {module.anchor}"
+                )
+            if module.hinge:
+                parent_id = module.hinge.rsplit(".", 1)[0]
+                if parent_id not in ids:
+                    raise ValueError(
+                        f"assembly_spec: {module.id}.hinge 引用未知部件 {parent_id}"
+                    )
+        if not self.modules:
+            object.__setattr__(self, "modules", [module.id for module in self.assembly_spec])
+        return self
 
 
 class DesignReviewIn(BaseModel):
@@ -229,6 +335,16 @@ class ForgeRenderIn(BaseModel):
     )
 
 
+class AgentActivityStepOut(BaseModel):
+    id: str
+    kind: str = "tool"
+    label: str
+    detail: str | None = None
+    status: str = "running"  # running | done | error
+    tool: str | None = None
+    at: str | None = None
+
+
 class AgentStatusOut(BaseModel):
     active: bool
     turn_id: str | None = None
@@ -238,6 +354,7 @@ class AgentStatusOut(BaseModel):
     status: str | None = None
     external_url: str | None = None
     active_job_id: str | None = None
+    activity: list[AgentActivityStepOut] = Field(default_factory=list)
 
 
 class ProjectCapabilitiesOut(BaseModel):

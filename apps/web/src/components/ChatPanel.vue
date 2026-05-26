@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import type {
+  AgentActivityStep,
   ChatMessage,
   DesignTurn,
   Health,
@@ -8,6 +9,7 @@ import type {
   ModelPick,
   ModelVersion,
   ProjectCapabilities,
+  TurnImage,
 } from "../api/client";
 import { getJob, getProjectState, sendTurn, waitAgentRun } from "../api/client";
 import { mergeSessionPhase } from "../composables/useDesignTurn";
@@ -21,6 +23,8 @@ import { phaseLabel, type GenerationState, type JobPhase } from "../types/genera
 import { formatPickShort } from "../types/pick";
 import ChatMessageBody from "./ChatMessageBody.vue";
 import DesignContextBanner from "./DesignContextBanner.vue";
+import ValidationWarningsPanel from "./ValidationWarningsPanel.vue";
+import AgentActivityPanel from "./AgentActivityPanel.vue";
 import type { DesignContextView } from "./DesignContextBanner.vue";
 
 const props = withDefaults(
@@ -38,6 +42,8 @@ const props = withDefaults(
     versions?: ModelVersion[];
     selectedVersion?: number | null;
     agentBusyExternal?: boolean;
+    validationWarnings?: string[];
+    captureViewport?: () => string | null;
   }>(),
   {
     hasModel: false,
@@ -50,6 +56,8 @@ const props = withDefaults(
     versions: () => [],
     selectedVersion: null,
     agentBusyExternal: false,
+    validationWarnings: () => [],
+    captureViewport: undefined,
   },
 );
 
@@ -71,13 +79,36 @@ const agentBusy = ref(false);
 const agentActive = ref(false);
 const submitError = ref<string | null>(null);
 const capabilities = ref<ProjectCapabilities | null>(null);
+const agentActivity = ref<AgentActivityStep[]>([]);
 const bottomRef = ref<HTMLElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
+const fileInputRef = ref<HTMLInputElement | null>(null);
+
+type PendingImage = {
+  dataUrl: string;
+  mimeType: string;
+  filename: string;
+};
+
+const pendingImages = ref<PendingImage[]>([]);
+const composerNotice = ref<string | null>(null);
+const MAX_PENDING_IMAGES = 3;
+
+const canCaptureViewport = computed(
+  () => Boolean(props.captureViewport) && props.hasModel && !composerDisabled.value,
+);
+
+const TEXTAREA_MIN_HEIGHT = 44;
+const TEXTAREA_MAX_HEIGHT = 132;
 
 const chatMode = computed<WebChatMode | null>(() => {
   const fromState = capabilities.value?.web_chat_mode;
-  if (fromState) return fromState;
-  if (props.health?.web_chat_mode) return props.health.web_chat_mode;
+  const fromHealth = props.health?.web_chat_mode;
+  // Project state refreshes readiness on every SSE tick; prefer agent if either source says so.
+  if (fromState === "agent" || fromHealth === "agent") return "agent";
+  if (fromState === "setup_required" || fromHealth === "setup_required") {
+    return "setup_required";
+  }
   return null;
 });
 
@@ -107,8 +138,84 @@ const phase = computed<JobPhase>(() =>
 
 const anyBusy = computed(() => sending.value || session.value.busy);
 const canSend = computed(
-  () => chatMode.value === "agent" && !sending.value && !anyBusy.value,
+  () =>
+    chatMode.value === "agent" &&
+    !sending.value &&
+    !anyBusy.value &&
+    (input.value.trim().length > 0 || pendingImages.value.length > 0),
 );
+
+function attachDataUrl(dataUrl: string, filename = "screenshot.png", mimeType = "image/png") {
+  if (pendingImages.value.length >= MAX_PENDING_IMAGES) return;
+  pendingImages.value.push({ dataUrl, mimeType, filename });
+}
+
+function removePendingImage(index: number) {
+  pendingImages.value.splice(index, 1);
+}
+
+function pendingToTurnImages(): TurnImage[] {
+  return pendingImages.value.map((img) => ({
+    data: img.dataUrl,
+    mime_type: img.mimeType,
+    filename: img.filename,
+  }));
+}
+
+function attachViewportScreenshot() {
+  composerNotice.value = null;
+  if (!props.hasModel) {
+    composerNotice.value = CHAT.screenshotNeedModel;
+    return;
+  }
+  const dataUrl = props.captureViewport?.();
+  if (!dataUrl) {
+    composerNotice.value = CHAT.screenshotFailed;
+    return;
+  }
+  attachDataUrl(dataUrl, "viewport.png");
+  composerNotice.value = CHAT.screenshotAttached;
+}
+
+function openImagePicker() {
+  fileInputRef.value?.click();
+}
+
+async function onImageFilesSelected(event: Event) {
+  const inputEl = event.target as HTMLInputElement;
+  const files = inputEl.files;
+  if (!files?.length) return;
+  for (const file of Array.from(files)) {
+    if (pendingImages.value.length >= MAX_PENDING_IMAGES) break;
+    if (!file.type.startsWith("image/")) continue;
+    const dataUrl = await readFileAsDataUrl(file);
+    attachDataUrl(dataUrl, file.name, file.type || "image/png");
+  }
+  inputEl.value = "";
+}
+
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ""));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+async function onComposerPaste(event: ClipboardEvent) {
+  const items = event.clipboardData?.items;
+  if (!items?.length) return;
+  for (const item of Array.from(items)) {
+    if (pendingImages.value.length >= MAX_PENDING_IMAGES) break;
+    if (!item.type.startsWith("image/")) continue;
+    const file = item.getAsFile();
+    if (!file) continue;
+    event.preventDefault();
+    const dataUrl = await readFileAsDataUrl(file);
+    attachDataUrl(dataUrl, file.name || "pasted.png", file.type || "image/png");
+  }
+}
 
 watch(
   () => chatMode.value,
@@ -120,15 +227,25 @@ watch(
 const statusDetail = computed(() => session.value.detail ?? submitError.value);
 const activityLabel = computed(() => {
   if (sending.value) return "已发送…";
+  const steps = agentActivity.value;
+  const running = steps.filter((s) => s.status === "running").pop();
+  if (running) return running.label;
   if (session.value.lane === "render") {
     return phaseLabel(phase.value, statusDetail.value ?? undefined) ?? "正在生成 3D 模型…";
   }
   if (session.value.lane === "agent") {
+    const last = steps[steps.length - 1];
+    if (last?.status === "done") return last.label;
     const dp = session.value.designPhase;
     if (dp && DESIGN_PHASE_LABEL[dp]) return DESIGN_PHASE_LABEL[dp];
     return CHAT.processing;
   }
   return null;
+});
+
+const renderJobMessage = computed(() => {
+  if (session.value.lane !== "render" && !props.generation?.busy) return null;
+  return props.generation?.detail ?? statusDetail.value ?? null;
 });
 
 const designPhaseBadge = computed(() => {
@@ -166,9 +283,27 @@ function versionForMessage(m: ChatMessage): ModelVersion | null {
 }
 
 function roleLabel(m: ChatMessage): string {
-  if (m.role === "user") return "你";
-  if (m.role === "system") return "系统";
+  if (m.role === "user") return CHAT.roleUser;
+  if (m.role === "system") return CHAT.roleSystem;
   return assistantName.value;
+}
+
+const composerDisabled = computed(
+  () => !props.projectId || chatMode.value !== "agent" || assistantChecking.value,
+);
+
+function resizeTextarea() {
+  const el = textareaRef.value;
+  if (!el) return;
+  el.style.height = "auto";
+  const next = Math.min(Math.max(el.scrollHeight, TEXTAREA_MIN_HEIGHT), TEXTAREA_MAX_HEIGHT);
+  el.style.height = `${next}px`;
+}
+
+function resetTextareaHeight() {
+  const el = textareaRef.value;
+  if (!el) return;
+  el.style.height = `${TEXTAREA_MIN_HEIGHT}px`;
 }
 
 const inputPlaceholder = computed(() => {
@@ -196,6 +331,7 @@ async function refreshMessages(projectId: string) {
   const state = await getProjectState(projectId);
   messages.value = state.messages;
   capabilities.value = state.capabilities;
+  agentActivity.value = state.agent.activity ?? [];
   agentActive.value = state.agent.active;
   emit("activeTurnChange", state.active_turn);
   return state;
@@ -242,6 +378,11 @@ watch([messages, phase, statusDetail, activityLabel], async () => {
   bottomRef.value?.scrollIntoView({ behavior: "smooth" });
 });
 
+watch(input, async () => {
+  await nextTick();
+  resizeTextarea();
+});
+
 watch(
   () => [props.initialPrompt, props.autoSubmitInitial, props.projectId] as const,
   async ([prompt, auto, pid]) => {
@@ -266,6 +407,7 @@ async function pollAgentRun(projectId: string, prompt: string) {
     await waitAgentRun(projectId, (state) => {
       messages.value = state.messages;
       capabilities.value = state.capabilities;
+      agentActivity.value = state.agent.activity ?? [];
       agentActive.value = state.agent.active;
       emit("activeTurnChange", state.active_turn);
       const st = state.agent;
@@ -287,7 +429,9 @@ async function pollAgentRun(projectId: string, prompt: string) {
 }
 
 async function submitText(text: string) {
-  if (!props.projectId || !text.trim() || sending.value) return;
+  if (!props.projectId || sending.value) return;
+  const trimmed = text.trim();
+  if (!trimmed && pendingImages.value.length === 0) return;
   if (chatMode.value !== "agent") {
     submitError.value =
       chatMode.value === null ? CHAT.submitChecking : CHAT.submitUnavailable;
@@ -298,9 +442,12 @@ async function submitText(text: string) {
     return;
   }
 
-  const prompt = text.trim();
+  const prompt = trimmed || "请查看截图并检查当前模型。";
   sending.value = true;
   submitError.value = null;
+  composerNotice.value = null;
+  const images = pendingToTurnImages();
+  pendingImages.value = [];
 
   try {
     const turn = await sendTurn(
@@ -308,6 +455,7 @@ async function submitText(text: string) {
       prompt,
       props.pick,
       props.pick?.element ?? null,
+      images,
     );
     await refreshMessages(props.projectId);
 
@@ -321,7 +469,7 @@ async function submitText(text: string) {
 
     emit("turnComplete");
   } catch (err) {
-    submitError.value = err instanceof Error ? err.message : "发送失败，请稍后重试";
+    submitError.value = err instanceof Error ? err.message : CHAT.submitFailed;
   } finally {
     sending.value = false;
   }
@@ -329,13 +477,14 @@ async function submitText(text: string) {
 
 async function handleSubmit(e?: Event) {
   e?.preventDefault();
-  if (!input.value.trim()) return;
+  if (!input.value.trim() && pendingImages.value.length === 0) return;
   if (!props.projectId) {
     emit("requestProject");
     return;
   }
   const text = input.value.trim();
   input.value = "";
+  resetTextareaHeight();
   await submitText(text);
 }
 
@@ -344,9 +493,10 @@ function focusInput() {
 }
 
 function prefillFromPick(p: ModelPick) {
-  const name = p.label ?? p.element ?? "选中部件";
+  const name = p.label ?? p.element ?? CHAT.pickElement;
   if (!input.value.trim()) {
-    input.value = `请修改「${name}」：`;
+    input.value = CHAT.prefillModify(name);
+    void nextTick(resizeTextarea);
   }
 }
 
@@ -357,7 +507,11 @@ watch(
   },
 );
 
-defineExpose({ focusInput, prefillFromPick });
+defineExpose({ focusInput, prefillFromPick, attachViewportScreenshot, attachDataUrl });
+
+onMounted(() => {
+  resizeTextarea();
+});
 </script>
 
 <template>
@@ -374,7 +528,7 @@ defineExpose({ focusInput, prefillFromPick });
     </header>
 
     <div v-if="projectId && versions.length > 0" class="version-timeline">
-      <span class="version-timeline-label">方案</span>
+      <span class="version-timeline-label">{{ CHAT.versionLabel }}</span>
       <button
         v-for="v in versions"
         :key="v.version"
@@ -393,6 +547,8 @@ defineExpose({ focusInput, prefillFromPick });
 
     <div class="chat-panel-notices">
       <DesignContextBanner v-if="designContext" :context="designContext" />
+      <ValidationWarningsPanel :warnings="validationWarnings" />
+      <div v-if="composerNotice" class="chat-composer-notice">{{ composerNotice }}</div>
       <div v-if="submitError" class="chat-error-banner" role="alert">{{ submitError }}</div>
     </div>
 
@@ -428,44 +584,178 @@ defineExpose({ focusInput, prefillFromPick });
             v{{ versionForMessage(m)!.version }}
           </button>
         </div>
-        <ChatMessageBody :content="m.content" :role="m.role" />
+        <ChatMessageBody :content="m.content" :role="m.role" :images="m.images" />
       </div>
 
-      <div v-if="anyBusy" class="chat-activity">
+      <AgentActivityPanel
+        v-if="agentActivity.length || (anyBusy && renderJobMessage)"
+        :steps="agentActivity"
+        :active-job-message="anyBusy ? renderJobMessage : null"
+      />
+
+      <div v-else-if="anyBusy" class="chat-activity">
         <span class="spinner spinner--inline" aria-hidden="true" />
-        {{ activityLabel ?? "处理中…" }}
+        {{ activityLabel ?? CHAT.activityFallback }}
       </div>
 
       <div ref="bottomRef" />
     </div>
 
     <form class="chat-form" @submit="handleSubmit">
-      <div v-if="pick" class="context-banner context-banner--pick">
-        <span class="context-banner-dot" aria-hidden="true" />
-        <span class="context-banner-text">
-          {{ pick.element ? "选中部件" : "点选位置" }}：<strong>{{ formatPickShort(pick) }}</strong>
-        </span>
-        <button type="button" class="context-banner-clear" @click="emit('clearPick')">清除</button>
-      </div>
+      <div
+        class="chat-composer"
+        :class="{
+          'chat-composer--busy': anyBusy && !sending,
+          'chat-composer--disabled': composerDisabled,
+        }"
+      >
+        <div v-if="pick" class="chat-composer-context">
+          <span class="chat-composer-context-chip">
+            <span class="chat-composer-context-dot" aria-hidden="true" />
+            <span class="chat-composer-context-text">
+              {{ pick.element ? CHAT.pickElement : CHAT.pickLocation }}：
+              <strong>{{ formatPickShort(pick) }}</strong>
+            </span>
+            <button
+              type="button"
+              class="chat-composer-context-clear"
+              :aria-label="CHAT.clearPick"
+              @click="emit('clearPick')"
+            >
+              ×
+            </button>
+          </span>
+        </div>
 
-      <div class="chat-input-wrap">
+        <label class="sr-only" for="chat-composer-input">{{ CHAT.panelTitle }}</label>
+        <input
+          ref="fileInputRef"
+          type="file"
+          accept="image/png,image/jpeg,image/webp,image/gif"
+          multiple
+          class="sr-only"
+          @change="onImageFilesSelected"
+        />
+
+        <div v-if="pendingImages.length" class="chat-composer-images">
+          <div
+            v-for="(img, index) in pendingImages"
+            :key="`${img.filename}-${index}`"
+            class="chat-composer-image-chip"
+          >
+            <img :src="img.dataUrl" :alt="img.filename" class="chat-composer-image-thumb" />
+            <button
+              type="button"
+              class="chat-composer-image-remove"
+              :aria-label="CHAT.removeImage"
+              @click="removePendingImage(index)"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
         <textarea
+          id="chat-composer-input"
           ref="textareaRef"
           v-model="input"
+          class="chat-composer-input"
           :placeholder="inputPlaceholder"
-          rows="2"
+          :title="CHAT.inputHint"
+          rows="1"
+          :aria-busy="anyBusy"
+          @input="resizeTextarea"
+          @paste="onComposerPaste"
           @keydown.enter.exact.prevent="handleSubmit()"
         />
-        <button
-          type="submit"
-          class="btn-primary chat-send-btn"
-          :disabled="!canSend || !input.trim() || anyBusy"
-          aria-label="发送"
-        >
-          {{ sending ? "…" : "↑" }}
-        </button>
+
+        <div class="chat-composer-footer">
+          <div class="chat-composer-actions">
+            <button
+              type="button"
+              class="chat-icon-btn"
+              :disabled="!canCaptureViewport || pendingImages.length >= MAX_PENDING_IMAGES"
+              :aria-label="CHAT.attachScreenshot"
+              :title="hasModel ? CHAT.attachScreenshot : CHAT.screenshotNeedModel"
+              @click="attachViewportScreenshot"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <path
+                  d="M4 7h3l2-2h6l2 2h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linejoin="round"
+                />
+                <circle
+                  cx="12"
+                  cy="13"
+                  r="3.25"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                />
+              </svg>
+            </button>
+            <button
+              type="button"
+              class="chat-icon-btn"
+              :disabled="composerDisabled || pendingImages.length >= MAX_PENDING_IMAGES"
+              :aria-label="CHAT.attachImage"
+              :title="CHAT.attachImage"
+              @click="openImagePicker"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+                <rect
+                  x="4"
+                  y="5"
+                  width="16"
+                  height="14"
+                  rx="2"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                />
+                <circle cx="9" cy="10" r="1.35" fill="currentColor" />
+                <path
+                  d="M7 17l4-4 3 3 3-4 3 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.75"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </button>
+          </div>
+          <button
+            type="submit"
+            class="chat-send-btn"
+            :disabled="!canSend"
+            :aria-label="sending ? CHAT.sendBusy : CHAT.sendLabel"
+            :aria-busy="sending"
+          >
+            <span v-if="sending" class="spinner chat-send-spinner" aria-hidden="true" />
+            <svg
+              v-else
+              class="chat-send-icon"
+              viewBox="0 0 24 24"
+              width="18"
+              height="18"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 5v14M5 12l7-7 7 7"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
-      <p class="chat-form-hint">Enter 发送 · Shift+Enter 换行</p>
     </form>
   </div>
 </template>

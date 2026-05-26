@@ -24,36 +24,35 @@ make dev WEB_TURN=bridge              # + 浏览器内对话
 
 **依赖与 LLM 归属**：[docs/dependencies.md](docs/dependencies.md)
 
-## Skills（按序）
+## 建模范式（render-first）
+
+[docs/forge-modeling-guide.md](docs/forge-modeling-guide.md) — Agent **优先 render_forge**，用 `spatial_digest` / `validation_warnings`（可选改进）迭代；plan/review 为可选归档。
+
+ForgeCAD 全量 API：`cd apps/forge-runner && npx forgecad skill install`
+
+## Skills
 
 | Skill | 阶段 |
 |-------|------|
 | `notion3d-pipeline` | 总览 |
-| `notion3d-intake` | 需求澄清 |
-| `notion3d-plan` | 建模计划 |
-| `notion3d-forge-author` | 写 ForgeCAD |
-| `notion3d-mcp` | MCP 工具 |
-| `notion3d-review` | 验收 |
+| `notion3d-mcp` | MCP 工具与 render 循环 |
 
-## MCP 工作流
+## MCP 主路径
 
 ```
 notion3d_health()
-notion3d_report_design_plan(...)
 notion3d_render_forge(forge_code, files_json=...)
 notion3d_wait_job(...)
-notion3d_report_design_review(...)
-notion3d_get_forge_sources(...)
-notion3d_apply_template(...)
+notion3d_get_forge_sources(...)   # 改稿
 ```
 
-主路径 tools：`notion3d_health` · `notion3d_report_design_plan` · `notion3d_render_forge` · `notion3d_wait_job` · `notion3d_report_design_review` · `notion3d_get_forge_sources` · `notion3d_apply_template`
+可选归档：`notion3d_report_design_plan` · `notion3d_report_design_review` · `notion3d_apply_template`
 
-**Web Turn / 状态**（`WEB_TURN=bridge|gateway` 或需读快照时）：`notion3d_get_project_state` · `notion3d_wait_agent`（等浏览器侧 Agent 跑完，`agent.active` → false）。Sidecar 示例：[docs/agents/web-turn-bridge.md](docs/agents/web-turn-bridge.md#mcp-辅助工具web-turn)
+**Web Turn / 状态**：`notion3d_get_project_state` · `notion3d_wait_agent`
 
 ## 延伸阅读
 
-- [docs/dependencies.md](docs/dependencies.md) — 依赖、LLM 归属、环境变量
-- [docs/agents/README.md](docs/agents/README.md) — 接口与部署
-- [docs/agents/openclaw.md](docs/agents/openclaw.md) — MCP 宿主示例（OpenClaw）
-- [docs/architecture.md](docs/architecture.md) — 完整 API / MCP 表
+- [docs/dependencies.md](docs/dependencies.md)
+- [docs/agents/README.md](docs/agents/README.md)
+- [docs/design-pipeline.md](docs/design-pipeline.md)
+- [docs/architecture.md](docs/architecture.md)

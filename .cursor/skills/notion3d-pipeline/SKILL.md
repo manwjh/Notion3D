@@ -1,27 +1,35 @@
 ---
 name: notion3d-pipeline
 description: >-
-  Notion3D design pipeline orchestrator: multi-phase workflow intake → plan →
-  author → render → review. Routes to notion3d-intake, notion3d-plan,
-  notion3d-forge-author, notion3d-mcp, notion3d-review skills. Use for all
-  Notion3D Web/MCP modeling tasks.
+  Notion3D render-first modeling: health → render_forge → wait_job → iterate.
+  Optional plan/review archives. Use for all Notion3D Web/MCP modeling tasks.
 ---
 
-# Notion3D 设计流水线（总览）
+# Notion3D 建模（render-first）
+
+真源：[docs/forge-modeling-guide.md](../../docs/forge-modeling-guide.md)
 
 ```
-用户描述 → intake → plan → author → render → review → 完成
+用户描述 → render_forge → wait_job → 读反馈 → 改 forge → … → 交付
 ```
 
-## Skills（按序）
+## 原则
 
-| Skill | 职责 |
+1. **优先出可见结果** — 合理默认尺寸，不要问卷
+2. **渲染结果是真理** — mesh / spatial_digest / 用户截图 > recipe 正则
+3. **指哪改哪** — `get_forge_sources(vN)` 增量改稿
+4. **校验是建议** — `装配校验：` / `建模建议：` 不阻塞交付
+5. **plan/review 可选** — 复杂装配时可 `report_design_plan` 归档
+
+## Skill
+
+| Skill | 用途 |
 |-------|------|
-| [notion3d-intake](../notion3d-intake/SKILL.md) | 澄清需求、A/B/C 分类 |
-| [notion3d-plan](../notion3d-plan/SKILL.md) | `report_design_plan` |
-| [notion3d-forge-author](../notion3d-forge-author/SKILL.md) | 写/改 `.forge.js` |
-| [notion3d-mcp](../notion3d-mcp/SKILL.md) | `render_forge` / `wait_job` |
-| [notion3d-review](../notion3d-review/SKILL.md) | `report_design_review` |
+| [notion3d-mcp](../notion3d-mcp/SKILL.md) | MCP 工具与主循环 |
+
+## 模板（可选起点）
+
+sketch-enclosure · sketch-bracket · loft-hull · hello-assembly
 
 ## 参考
 

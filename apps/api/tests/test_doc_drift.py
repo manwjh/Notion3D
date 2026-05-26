@@ -77,7 +77,6 @@ WEB_CLIENT_ROUTE_TEMPLATES = (
     "/health",
     "/api/projects",
     "/api/projects/${projectId}/render-forge",
-    "/api/projects/${projectId}/versions/${version}/forge-preview",
     "/api/projects/${projectId}/state",
     "/api/projects/${projectId}/state/events",
     "/api/projects/${projectId}/turn",

@@ -153,6 +153,10 @@ async function handleResumeStl() {
     resumingStl.value = false;
   }
 }
+
+function captureViewportScreenshot() {
+  return viewportRef.value?.captureScreenshot?.() ?? null;
+}
 </script>
 
 <template>
@@ -314,6 +318,8 @@ async function handleResumeStl() {
           :narrow="narrowLayout"
           :versions="versions"
           :selected-version="selectedVersion"
+          :validation-warnings="activeValidationWarnings"
+          :capture-viewport="captureViewportScreenshot"
           @consume-initial-prompt="
             pendingPrompt = null;
             pendingAutoSubmit = false;

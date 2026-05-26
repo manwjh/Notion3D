@@ -8,9 +8,12 @@ from typing import Any
 
 from app.models.schemas import DesignPhase, DesignTurnOut, JobStatus, MessageRole, PlanStrategy, ReviewStatus, TaskClass
 from app.services import job_store, storage
+from app.services.forge_modeling import CAPABILITY_GAP_PREFIX
 
 TERMINAL_DESIGN_PHASES = frozenset({DesignPhase.done.value, DesignPhase.blocked.value})
-MAX_DESIGN_REVISION = 2
+MAX_DESIGN_REVISION = 8
+ASSEMBLY_WARNING_PREFIX = "装配校验："
+# Render-first: validation warnings are advisory; they never block auto-pass or delivery.
 
 
 class DesignTurnError(Exception):
@@ -32,7 +35,7 @@ def begin_turn(project_id: str, user_message_id: str, *, turn_id: str | None = N
         "version": None,
         "agent_phase": "running",
         "render_phase": "idle",
-        "design_phase": DesignPhase.intake.value,
+        "design_phase": DesignPhase.author.value,
         "plan": None,
         "review": None,
         "revision": 0,
@@ -100,15 +103,27 @@ def set_version(project_id: str, turn_id: str, version: int) -> None:
     _patch_turn(project_id, version=version)
 
 
+def _user_text_for_turn(project_id: str, turn: dict) -> str:
+    message_id = turn.get("user_message_id")
+    if not message_id:
+        return ""
+    for msg in reversed(storage.list_messages(project_id)):
+        if msg.get("id") == message_id:
+            return str(msg.get("content") or "")
+    return ""
+
+
 def set_design_plan(project_id: str, turn_id: str | None, plan: dict[str, Any]) -> dict:
     turn = _resolve_turn(project_id, turn_id)
     if turn.get("design_phase") == DesignPhase.blocked.value:
         raise DesignTurnError("当前轮次已阻塞，无法提交计划")
-    task_class = plan.get("task_class")
+    from app.services.design_intent import infer_fidelity_fields
+    from app.services.forge_modeling import enrich_plan_geometry_recipes
+
+    plan = infer_fidelity_fields(plan, _user_text_for_turn(project_id, turn))
+    plan = enrich_plan_geometry_recipes(plan)
     strategy = plan.get("strategy")
-    if task_class == TaskClass.C.value:
-        next_phase = DesignPhase.blocked.value
-    elif strategy == PlanStrategy.chat_only.value:
+    if strategy == PlanStrategy.chat_only.value:
         next_phase = DesignPhase.done.value
     else:
         next_phase = DesignPhase.author.value
@@ -196,21 +211,59 @@ def ensure_implicit_plan(
     if not turn or turn["id"] != turn_id or turn.get("plan"):
         return
     summary = (prompt or "").strip() or "Agent 建模任务"
+    from app.services.design_intent import infer_fidelity_fields
+
+    implicit = infer_fidelity_fields(
+        {
+            "task_class": TaskClass.A.value,
+            "summary": summary,
+            "strategy": PlanStrategy.from_scratch.value,
+        },
+        summary,
+    )
     set_design_plan(
         project_id,
         turn_id,
         {
-            "task_class": TaskClass.A.value,
+            **implicit,
             "summary": summary[:2000],
-            "strategy": PlanStrategy.from_scratch.value,
-            "assumptions": ["Agent 未提交 design plan，Engine 自动生成 implicit plan"],
+            "assumptions": [
+                *(implicit.get("assumptions") or []),
+                "Agent 未提交 design plan，Engine 自动生成 implicit plan",
+            ],
             "modules": [],
         },
     )
 
 
+def _latest_job_id(turn: dict) -> str | None:
+    job_id = turn.get("job_id")
+    if job_id:
+        return job_id
+    job_ids = turn.get("job_ids") or []
+    return job_ids[-1] if job_ids else None
+
+
+def _job_validation_warnings(project_id: str, turn: dict) -> list[str]:
+    job_id = _latest_job_id(turn)
+    if not job_id:
+        return []
+    job = job_store.load_job(job_id)
+    if not job:
+        return []
+    return list(job.get("validation_warnings") or [])
+
+
+def _advisory_validation_warnings(warnings: list[str]) -> list[str]:
+    return [
+        str(w)
+        for w in warnings
+        if str(w).startswith(ASSEMBLY_WARNING_PREFIX) or str(w).startswith(CAPABILITY_GAP_PREFIX)
+    ]
+
+
 def _try_auto_pass_review(project_id: str) -> None:
-    """Close review when render succeeded but Agent did not call report_design_review."""
+    """Close turn when render succeeded — warnings are advisory only."""
     turn = get_active_turn(project_id)
     if not turn:
         return
@@ -225,12 +278,19 @@ def _try_auto_pass_review(project_id: str) -> None:
     if turn.get("design_phase") not in (
         DesignPhase.review.value,
         DesignPhase.render.value,
+        DesignPhase.author.value,
     ):
         return
 
+    warnings = _job_validation_warnings(project_id, turn)
+    advisory = _advisory_validation_warnings(warnings)
+    notes = ["Engine 自动完成（render-first；校验提示为可选改进）"]
+    if advisory:
+        notes.extend(advisory[:8])
+
     review = {
         "status": ReviewStatus.pass_.value,
-        "notes": ["Engine 自动验收（Agent 未调用 report_design_review）"],
+        "notes": notes,
         "retry_phase": None,
         "recorded_at": _utcnow(),
     }
@@ -350,9 +410,6 @@ def maybe_finalize_turn(project_id: str) -> None:
         storage.update_project_meta(project_id, active_turn=None)
         return
 
-    if had_render and render_phase == "done" and design_phase == DesignPhase.review.value:
-        return
-
     if had_render and render_phase == "failed":
         storage.update_project_meta(project_id, active_turn=None)
         return
@@ -408,7 +465,7 @@ def turn_out(project_id: str, active_job: dict | None = None) -> DesignTurnOut |
         id=turn["id"],
         agent_phase=turn.get("agent_phase", "running"),
         render_phase=turn.get("render_phase", "idle"),
-        design_phase=turn.get("design_phase", DesignPhase.intake.value),
+        design_phase=turn.get("design_phase", DesignPhase.author.value),
         user_message_id=turn["user_message_id"],
         assistant_message_id=turn.get("assistant_message_id"),
         job_id=turn.get("job_id"),

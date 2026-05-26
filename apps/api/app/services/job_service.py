@@ -161,7 +161,39 @@ async def _ensure_version_files(
         "cad_backend": CadBackend.forgecad.value,
     })
     _write_version_meta(project_id, version, meta)
+    _write_design_snapshots(project_id, job_id, version)
     return version
+
+
+def _write_design_snapshots(project_id: str, job_id: str, version: int) -> None:
+    job = get_job(job_id)
+    if not job or not job.get("turn_id"):
+        return
+    turn = design_turn.get_active_turn(project_id)
+    if not turn or turn["id"] != job["turn_id"]:
+        return
+    plan = turn.get("plan") or {}
+    if not plan:
+        return
+    out_dir = storage.version_dir(project_id, version)
+    spec = plan.get("assembly_spec") or []
+    if spec:
+        (out_dir / "assembly_spec.json").write_text(
+            json.dumps(spec, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    recipes = plan.get("geometry_recipes") or []
+    if recipes:
+        (out_dir / "geometry_recipes.json").write_text(
+            json.dumps(recipes, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    from app.services.design_intent import design_intent_snapshot
+
+    (out_dir / "design_intent.json").write_text(
+        json.dumps(design_intent_snapshot(plan), ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 async def _render_stl_stage(
@@ -196,6 +228,15 @@ async def _render_stl_stage(
         _write_version_meta(project_id, version, meta)
         update_job(job_id, validation_warnings=result.warnings)
         _append_validation_warnings(project_id, job_id, result.warnings, get_job(job_id))
+
+    from app.services.assembly_digest import build_spatial_digest
+
+    digest = build_spatial_digest(project_id, version)
+    if digest:
+        meta = _read_version_meta(project_id, version)
+        meta["spatial_digest"] = digest
+        _write_version_meta(project_id, version, meta)
+        update_job(job_id, spatial_digest=digest)
     update_job(job_id, message="3D 模型已就绪", stl_ready=True, checkpoint="stl_done")
     _set_version_status(project_id, version, "complete")
     _snapshot_design_artifacts(project_id, job_id, version)

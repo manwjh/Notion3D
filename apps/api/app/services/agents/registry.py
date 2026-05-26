@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from app.config import settings
 from app.services.agents.base import AgentAdapter
 from app.services.agents.bridge_adapter import BridgeAdapter
@@ -14,22 +16,47 @@ _ADAPTERS: dict[str, AgentAdapter] = {
 }
 
 _ready_cache: dict[str, bool | None] = {aid: None for aid in _ADAPTERS}
+_ready_fail_streak: dict[str, int] = {aid: 0 for aid in _ADAPTERS}
+_ready_last_ok: dict[str, float] = {aid: 0.0 for aid in _ADAPTERS}
+
+# Avoid flapping to setup_required when sidecar health probes time out during long agent runs.
+_READY_FAIL_STREAK_MAX = 3
+_READY_GRACE_SEC = 90.0
 
 
 async def _refresh_adapter_ready(adapter_id: str) -> bool:
     adapter = _ADAPTERS[adapter_id]
     info = await adapter.info_ready()
-    _ready_cache[adapter_id] = info.ready
-    return info.ready
+    now = time.monotonic()
+    if info.ready:
+        _ready_cache[adapter_id] = True
+        _ready_fail_streak[adapter_id] = 0
+        _ready_last_ok[adapter_id] = now
+        return True
+
+    if _ready_cache.get(adapter_id) is True:
+        streak = _ready_fail_streak.get(adapter_id, 0) + 1
+        _ready_fail_streak[adapter_id] = streak
+        last_ok = _ready_last_ok.get(adapter_id, 0.0)
+        if streak < _READY_FAIL_STREAK_MAX or (now - last_ok) < _READY_GRACE_SEC:
+            return True
+
+    _ready_cache[adapter_id] = False
+    return False
 
 
 def get_adapter(adapter_id: str) -> AgentAdapter | None:
     return _ADAPTERS.get(adapter_id)
 
 
-async def refresh_provider_cache() -> None:
-    for adapter_id in _ADAPTERS:
-        await _refresh_adapter_ready(adapter_id)
+async def refresh_provider_cache(*, only: str | None = None) -> None:
+    """Probe sidecar readiness. Default: active WEB_TURN only (avoids SSE flapping)."""
+    if only and only in _ADAPTERS:
+        await _refresh_adapter_ready(only)
+        return
+    choice = settings.normalized_web_turn
+    if choice in _ADAPTERS:
+        await _refresh_adapter_ready(choice)
 
 
 def _configured_web_turn(preferred: str | None = None) -> str:

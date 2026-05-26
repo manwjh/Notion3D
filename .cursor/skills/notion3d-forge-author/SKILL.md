@@ -1,45 +1,28 @@
 ---
 name: notion3d-forge-author
 description: >-
-  Notion3D ForgeCAD authoring phase: write parametric assembly .forge.js strictly
-  from an approved design plan. Use after notion3d_report_design_plan, before
-  notion3d_render_forge. Do not re-interpret user intent here.
+  Write ForgeCAD for render_forge. Full API allowed; iterate from wait_job
+  feedback. Templates optional.
 ---
 
-# Notion3D Forge Author
+# Forge Author
 
-Design Turn 第三阶段：**只执行 plan，写 ForgeCAD 脚本**。
+真源：[docs/forge-modeling-guide.md](../../docs/forge-modeling-guide.md)
 
 ## 输入
 
-- 已提交的 `notion3d_report_design_plan`
-- 有上一版时：`notion3d_get_forge_sources(project_id, version)` → 改 forge_code / files → render_forge
-- `template_apply` 时：`notion3d_apply_template`（无需手写代码）
+- 用户需求 + 可选 vN：`notion3d_get_forge_sources`
+- 可选模板：`notion3d_apply_template` / `get_template`
 
-## 执行路径
+## 输出
 
-| plan.strategy | 动作 |
-|---------------|------|
-| template_apply | `notion3d_apply_template` + params → wait_job |
-| template_edit | get_template → 改 .forge.js → `notion3d_render_forge` |
-| from_scratch | 写 .forge.js → `notion3d_render_forge` |
-| 改上一版 | 在 vN 的 forge 基础上改 → `notion3d_render_forge` |
+- `notion3d_render_forge(forge_code, files_json=...)`
+- `notion3d_wait_job` → 读 digest / warnings → 继续改或回复用户
 
-## ForgeCAD 规范
+## 规范
 
-- 单位 mm；参数用 `param("Label", default, { min, max, unit: "mm" })`
-- 多部件：`return [ { name: "PartId", shape: geom.color("#RRGGBB") }, ... ]`
-- **部件精修**：每个部件用独立 `const partId = ...`（变量名与 return 中 shape 一致）；复杂部件可拆到 `src/part-name.forge.js` + `importAssembly`
-- `return` 中 `name` 与 Web 部件树 label 一致，便于点选精修
-- 外壳命名含 `Shell` / `外壳` → Web 半透明模式
-- 多文件：`importAssembly("src/foo.forge.js")` + `files_json='{"foo.forge.js":"..."}'`
-- 可用 `lib.bolt` / `lib.explode` 等 ForgeCAD 标准库
+- mm；多部件 `return [{ name, shape }]`
+- `src/*.forge.js` + `importAssembly` 用于复杂件
+- 全 ForgeCAD API 可用
 
-## 禁止
-
-- 偏离 plan 的尺寸/部件清单
-- 在本阶段改 plan（应 review→retry→plan）
-
-## 完成后
-
-→ **notion3d-mcp**：`notion3d_wait_job` → **notion3d-review**
+→ [notion3d-mcp](../notion3d-mcp/SKILL.md)

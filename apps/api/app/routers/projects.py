@@ -146,6 +146,28 @@ async def list_messages(project: ProjectDep) -> list[ChatMessageOut]:
     return chat_present.messages_out(project.id)
 
 
+@router.get("/{project_id}/messages/{message_id}/attachments/{filename}")
+async def get_message_attachment(
+    project: ProjectDep,
+    message_id: str,
+    filename: str,
+) -> FileResponse:
+    path = storage.attachment_file_path(project.id, message_id, filename)
+    if not path:
+        raise HTTPException(status_code=404, detail="附件不存在")
+    media = "application/octet-stream"
+    lower = filename.lower()
+    if lower.endswith(".png"):
+        media = "image/png"
+    elif lower.endswith(".jpg") or lower.endswith(".jpeg"):
+        media = "image/jpeg"
+    elif lower.endswith(".webp"):
+        media = "image/webp"
+    elif lower.endswith(".gif"):
+        media = "image/gif"
+    return FileResponse(path, media_type=media)
+
+
 @router.post("/{project_id}/render-forge", response_model=JobOut)
 async def render_forge(
     project: ProjectDep,

@@ -7,19 +7,19 @@ def test_prompt_includes_forge_render():
     text = build_agent_prompt("proj-1", "做一个电动牙刷装配", turn_id="turn-abc")
     assert 'project_id="proj-1"' in text
     assert "notion3d_render_forge" in text
-    assert "forge.js" in text
+    assert "render-first" in text
 
 
 def test_prompt_chat_only_path():
     text = build_agent_prompt("proj-1", "你好")
     assert "chat_only" in text
-    assert "不要 render" in text
+    assert "不 render" in text
 
 
-def test_prompt_demo_templates_not_required():
+def test_prompt_render_first_loop():
     text = build_agent_prompt("proj-1", "做一个盒子")
-    assert "不要为每个请求先 list_templates" in text
-    assert "from_scratch" in text
+    assert "wait_job" in text
+    assert "get_forge_sources" in text
 
 
 def test_prompt_modification_hints():

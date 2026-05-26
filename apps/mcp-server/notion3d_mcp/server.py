@@ -13,11 +13,10 @@ from notion3d_mcp.links import resolve_web_base_from_health
 mcp = FastMCP(
     "notion3d",
     instructions=(
-        "Notion3D ForgeCAD engine (no LLM). Start from notion3d-pipeline Skill, then: "
-        "notion3d-intake → notion3d-plan → notion3d-forge-author → notion3d-mcp → notion3d-review. "
-        "Before authoring: notion3d_report_design_plan. "
-        "Model with notion3d_render_forge + notion3d_wait_job. "
-        "After render: notion3d_report_design_review. "
+        "Notion3D ForgeCAD runtime (no LLM). Render-first loop: "
+        "health → render_forge → wait_job → iterate from spatial_digest / warnings. "
+        "report_design_plan and report_design_review are optional archives, not gates. "
+        "Full ForgeCAD API: docs/forge-modeling-guide.md. "
         "User is in Web workbench — do not ask for web_url."
     ),
 )
@@ -182,8 +181,8 @@ def notion3d_render_forge(
 
     Preferred path for multi-part models. Returns parts.json for Web assembly viewer.
     Optional files_json: JSON object of sub-files under src/, e.g.
-    {"motor.forge.js": "return box(10,10,10);"} for importAssembly("src/motor.forge.js").
-    See notion3d-forge-author skill.
+    {"mount.forge.js": "...union_bracket..."} for importAssembly("src/mount.forge.js").
+    See notion3d-forge-author skill and docs/forge-modeling-guide.md.
     """
     files = None
     if files_json:
@@ -229,17 +228,27 @@ def notion3d_report_design_plan(
     template_id: str | None = None,
     params_json: str | None = None,
     modules_json: str | None = None,
+    assembly_spec_json: str | None = None,
+    geometry_recipes_json: str | None = None,
     assumptions_json: str | None = None,
+    fidelity: str | None = None,
 ) -> str:
-    """Record modeling plan before authoring ForgeCAD. Advances turn to author (or blocked for class C).
+    """Optionally record modeling plan metadata (not required before render).
 
-    task_class: A | B | C
+    task_class: A | B | C (informational)
     strategy: template_apply | template_edit | from_scratch | chat_only
+    fidelity: layout_only | printable | decorative
+    assembly_spec_json: [{id, role, contains?, anchor?, hinge?}] for multi-part layouts
+    geometry_recipes_json: [{part_id, recipe, notes?}] optional notes per part.
+      recipe: sketch_extrude | sketch_extrude_shell | loft | sweep | revolve | union_bracket |
+      primitive_shell | primitive_layout. See docs/forge-modeling-guide.md.
     """
     import json
 
     params = json.loads(params_json) if params_json else None
     modules = json.loads(modules_json) if modules_json else None
+    assembly_spec = json.loads(assembly_spec_json) if assembly_spec_json else None
+    geometry_recipes = json.loads(geometry_recipes_json) if geometry_recipes_json else None
     assumptions = json.loads(assumptions_json) if assumptions_json else None
     return _out(
         client.report_design_plan(
@@ -251,7 +260,10 @@ def notion3d_report_design_plan(
             template_id=template_id,
             params=params,
             modules=modules,
+            assembly_spec=assembly_spec,
+            geometry_recipes=geometry_recipes,
             assumptions=assumptions,
+            fidelity=fidelity,
         )
     )
 
@@ -264,7 +276,7 @@ def notion3d_report_design_review(
     notes_json: str | None = None,
     retry_phase: str | None = None,
 ) -> str:
-    """Record design review after render. status: pass | retry | accept_warnings. retry_phase: plan | author."""
+    """Optionally record design review after render. status: pass | retry | accept_warnings. retry_phase: plan | author."""
     import json
 
     notes = json.loads(notes_json) if notes_json else None

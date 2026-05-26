@@ -7,6 +7,7 @@ const http = require("http");
 const path = require("path");
 const { randomUUID } = require("crypto");
 const { Agent, Cursor } = require("@cursor/sdk");
+const { createActivityCollector } = require("./activity");
 
 const PORT = Number(process.env.NOTION3D_AGENT_BRIDGE_PORT || 8787);
 const REPO_ROOT =
@@ -54,10 +55,7 @@ function baseOptions(logicalId) {
     name: `Notion3D ${logicalId}`,
     model: { id: MODEL },
     instructions:
-      "You are the Notion3D design agent. Start from notion3d-pipeline, then follow Skills: " +
-      "notion3d-intake → notion3d-plan → notion3d-forge-author → notion3d-mcp → notion3d-review. " +
-      "Before render_forge: notion3d_report_design_plan. After wait_job: notion3d_report_design_review. " +
-      "Default from_scratch or edit previous model.forge.js; list_templates only for demo templates.",
+      "You are the Notion3D modeling partner. Render-first: health → render_forge → wait_job → iterate from spatial_digest and validation_warnings (advisory only). Read docs/forge-modeling-guide.md. Optional: report_design_plan / report_design_review to archive decisions. Full ForgeCAD API available; templates are shortcuts. Do not expose pipeline jargon to the user.",
     local: {
       cwd: REPO_ROOT,
       settingSources: ["project"],
@@ -87,19 +85,38 @@ function collectAssistantText(event, parts) {
   }
 }
 
-async function executeRun(logicalId, prompt, runId) {
-  const entry = { status: "RUNNING", result: undefined, error: undefined };
+async function executeRun(logicalId, prompt, runId, images) {
+  const activityCollector = createActivityCollector();
+  const entry = {
+    status: "RUNNING",
+    result: undefined,
+    error: undefined,
+    activity: activityCollector.snapshot(),
+  };
   entry.done = (async () => {
     try {
       const agent = await getOrCreateAgent(logicalId);
       agents.set(logicalId, agent);
 
+      const message =
+        Array.isArray(images) && images.length > 0
+          ? {
+              text: prompt,
+              images: images.map((img) => ({
+                data: String(img.data || ""),
+                mimeType: String(img.mimeType || img.mime_type || "image/png"),
+              })),
+            }
+          : prompt;
+
+      activityCollector.ingest({ type: "status", message: "Agent 开始处理…" });
+
       let run;
       try {
-        run = await agent.send(prompt);
+        run = await agent.send(message);
       } catch (err) {
         if (err?.code === "agent_busy" || err?.name === "AgentBusyError") {
-          run = await agent.send(prompt, { local: { force: true } });
+          run = await agent.send(message, { local: { force: true } });
         } else {
           throw err;
         }
@@ -107,9 +124,12 @@ async function executeRun(logicalId, prompt, runId) {
 
       const parts = [];
       for await (const event of run.stream()) {
+        activityCollector.ingest(event);
+        entry.activity = activityCollector.snapshot();
         collectAssistantText(event, parts);
       }
       const outcome = await run.wait();
+      entry.activity = activityCollector.snapshot();
       const text = (outcome.result || parts.join("")).trim();
       entry.result = text;
       entry.status =
@@ -119,6 +139,11 @@ async function executeRun(logicalId, prompt, runId) {
     } catch (err) {
       entry.status = "ERROR";
       entry.error = err?.message || String(err);
+      activityCollector.ingest({
+        type: "status",
+        message: `出错：${entry.error}`,
+      });
+      entry.activity = activityCollector.snapshot();
     }
   })();
   runs.set(runId, entry);
@@ -146,21 +171,47 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body));
 }
 
-async function handleHealth(_req, res) {
-  let keyOk = false;
-  if (API_KEY) {
+/** Cached Cursor.me — avoid blocking every Engine/SSE health probe. */
+let keyVerifyCache = { ok: false, at: 0 };
+const KEY_VERIFY_TTL_MS = 120_000;
+let keyVerifyInFlight = null;
+
+async function verifyApiKey() {
+  if (!API_KEY) {
+    keyVerifyCache = { ok: false, at: Date.now() };
+    return false;
+  }
+  const now = Date.now();
+  if (now - keyVerifyCache.at < KEY_VERIFY_TTL_MS) {
+    return keyVerifyCache.ok;
+  }
+  if (keyVerifyInFlight) {
+    return keyVerifyInFlight;
+  }
+  keyVerifyInFlight = (async () => {
     try {
       await Cursor.me({ apiKey: API_KEY });
-      keyOk = true;
+      keyVerifyCache = { ok: true, at: Date.now() };
+      return true;
     } catch {
-      keyOk = false;
+      keyVerifyCache = { ok: false, at: Date.now() };
+      return false;
+    } finally {
+      keyVerifyInFlight = null;
     }
-  }
+  })();
+  return keyVerifyInFlight;
+}
+
+async function handleHealth(_req, res) {
+  const configured = Boolean(API_KEY);
+  const keyVerified = configured ? await verifyApiKey() : false;
   sendJson(res, 200, {
     status: "ok",
     runtime: "bridge",
-    api_key_configured: Boolean(API_KEY),
-    api_ready: keyOk,
+    api_key_configured: configured,
+    api_key_verified: keyVerified,
+    api_ready: configured,
     repo_root: REPO_ROOT,
     model: MODEL,
     mcp_python: MCP_PYTHON,
@@ -172,6 +223,7 @@ async function handleTurn(req, res) {
   const body = await readJson(req);
   const logicalId = String(body.agentId || body.agent_id || "").trim();
   const prompt = String(body.prompt || "").trim();
+  const images = Array.isArray(body.images) ? body.images : [];
   if (!logicalId || !prompt) {
     sendJson(res, 400, { error: "agentId and prompt are required" });
     return;
@@ -182,7 +234,7 @@ async function handleTurn(req, res) {
   }
 
   const runId = randomUUID();
-  void executeRun(logicalId, prompt, runId);
+  void executeRun(logicalId, prompt, runId, images);
   sendJson(res, 202, {
     agentId: logicalId,
     runId,
@@ -201,6 +253,7 @@ async function handleRunStatus(_req, res, runId) {
     status: entry.status,
     result: entry.result,
     error: entry.error,
+    activity: entry.activity || [],
   });
 }
 
@@ -216,6 +269,7 @@ async function handleRunWait(_req, res, runId) {
     status: entry.status,
     result: entry.result,
     error: entry.error,
+    activity: entry.activity || [],
   });
 }
 

@@ -1,0 +1,16 @@
+{
+  "id": "sketch-bracket",
+  "title": "L 型支架（union + fillet）",
+  "description": "能力模板 union_bracket：板件并集 + 圆角，可 template_edit 改尺寸",
+  "tags": ["bracket", "mechanical", "forge", "recipe-union_bracket"],
+  "category": "mechanical",
+  "format": "forge",
+  "license": "MIT",
+  "params": [
+    { "name": "Width", "label": "Width", "default": 80, "unit": "mm" },
+    { "name": "Height", "label": "Height", "default": 60, "unit": "mm" },
+    { "name": "Depth", "label": "Depth", "default": 40, "unit": "mm" },
+    { "name": "Thickness", "label": "Thickness", "default": 5, "unit": "mm" },
+    { "name": "Fillet", "label": "Fillet", "default": 2, "unit": "mm" }
+  ]
+}

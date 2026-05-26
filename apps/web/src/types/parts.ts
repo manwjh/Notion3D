@@ -5,11 +5,14 @@ export type PartSourceRef = {
   end_line: number;
 };
 
+export type PartRole = "shell" | "internal" | "lid" | "external" | "other";
+
 export type ModelPart = {
   id: string;
   label: string;
   color: string;
   stl_url: string;
+  role?: PartRole;
   opacity?: number;
   source_ref?: PartSourceRef;
 };

@@ -1,69 +1,59 @@
 # Notion3D 设计流水线
 
-Agent 按 Skill 分阶段执行；Engine 只负责 ForgeCAD 渲染。Web 左栏可手动改稿（参数 / 代码 / 部件精修），不经 Agent 也可重新渲染。
+Agent-native **render-first** 循环：写 Forge → 渲染 → 读反馈 → 迭代。Engine 不含 LLM；真源：[forge-modeling-guide.md](forge-modeling-guide.md)。
 
-## 流程
+## 主循环
 
 ```mermaid
 flowchart TD
-  U[用户消息] --> I[intake]
-  I --> P[plan]
-  P -->|A/B + 建模策略| A[author]
-  P -->|C| Blocked[blocked]
-  P -->|chat_only| Done[done]
-  A --> R[render_forge + wait_job]
-  R --> V[review]
-  V -->|pass / accept_warnings| Done
-  V -->|retry ≤2 次| P
-  V -->|retry ≤2 次| A
+  U[用户消息] --> R[render_forge + wait_job]
+  R --> F{满意?}
+  F -->|Agent/用户继续改| E[get_forge_sources → 改 forge]
+  E --> R
+  F -->|完成| Done[done]
   Done --> Manual[可选：Web 手动精修]
   Manual --> R
 ```
 
-## Design Phase
+## Design Phase（Engine 记录，非 Agent 门禁）
 
-| Phase | 触发 |
+| Phase | 含义 |
 |-------|------|
-| `intake` | `POST /turn` 或 MCP 会话开始 |
-| `plan` | 等待 `report_design_plan` |
-| `author` | plan 已记录且非 blocked |
-| `render` | `render_forge` 提交 Job |
-| `review` | Job 成功 |
-| `done` | review pass / accept_warnings / chat_only |
-| `blocked` | task_class C 或 Agent 失败 |
+| `author` | turn 开始；Agent 可建模 / render |
+| `render` | Job 运行中 |
+| `review` | 渲染成功，等待 Agent 回复（可选） |
+| `done` | turn 结束 |
+| `blocked` | Agent 运行失败 |
+
+`plan` / `intake` 仍存在于 schema，供可选 `report_design_plan` 与 UI 兼容。
 
 实现：`apps/api/app/services/design_turn.py`
 
-## Skills
+## 可选归档
 
-`notion3d-pipeline` → `intake` → `plan` → `forge-author` → `mcp` → `review`
+| 端点 / MCP | 用途 |
+|------------|------|
+| `report_design_plan` | 多部件时记录 summary / assembly_spec / geometry_recipes |
+| `report_design_review` | 显式验收记录（Engine 也会在 render 成功后 auto-complete） |
 
 ## Agent 环境
 
-| 环境 | 如何执行流水线 |
-|------|----------------|
-| MCP 宿主 | MCP tools（见 [AGENTS.md](../AGENTS.md)） |
-| Web 对话 | Web Turn sidecar 自动调 MCP |
-| 手动 | Web 左栏改 Forge → `POST /render-forge` |
+| 环境 | 执行方式 |
+|------|----------|
+| MCP 宿主 | MCP tools |
+| Web 对话 | Web Turn sidecar → MCP |
+| 手动 | Web 左栏 → `POST /render-forge` |
 
-接入说明：[agents/README.md](agents/README.md)
+## Engine 行为
 
-## 禁止
+| 情况 | Engine |
+|------|--------|
+| 直接 `render_forge` 无 plan | `ensure_implicit_plan` 事后补 metadata |
+| `validation_warnings` | **不阻塞**交付；装配/建模建议写入 digest |
+| render 成功 + Agent 已回复 | **auto-complete** turn（warnings 记入 review notes） |
+| `report_design_review(retry)` | 最多 **8** 次 revision |
 
-- 跳过 plan 直接写复杂装配
-- 单轮完成 intake + author + review
-
-## Engine 兜底
-
-Agent 跳步时 Engine 不会阻塞渲染，但会补记录：
-
-| 情况 | Engine 行为 |
-|------|-------------|
-| 未调 `report_design_plan` 直接 `render_forge` | 自动生成 **implicit plan**（`task_class=A`，`strategy=from_scratch`，summary 取自 job label） |
-| 渲染成功但未调 `report_design_review` | 在 Agent 回复后 **auto pass review** |
-| review 返回 `retry` | `revision` +1；最多 **2 次**（`MAX_DESIGN_REVISION`），超限则拒绝并提示手动编辑 |
-
-plan / review 的 HTTP 端点：
+HTTP：
 
 - `POST /api/projects/{id}/design/plan`
 - `POST /api/projects/{id}/design/review`

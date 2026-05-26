@@ -237,7 +237,10 @@ class Notion3DClient:
         template_id: str | None = None,
         params: dict[str, float] | None = None,
         modules: list[str] | None = None,
+        assembly_spec: list[dict[str, object]] | None = None,
+        geometry_recipes: list[dict[str, object]] | None = None,
         assumptions: list[str] | None = None,
+        fidelity: str | None = None,
     ) -> dict:
         body: dict[str, Any] = {
             "task_class": task_class,
@@ -252,8 +255,14 @@ class Notion3DClient:
             body["params"] = params
         if modules:
             body["modules"] = modules
+        if assembly_spec:
+            body["assembly_spec"] = assembly_spec
+        if geometry_recipes:
+            body["geometry_recipes"] = geometry_recipes
         if assumptions:
             body["assumptions"] = assumptions
+        if fidelity:
+            body["fidelity"] = fidelity
         return self.request("POST", f"/api/projects/{project_id}/design/plan", json_body=body)
 
     def report_design_review(

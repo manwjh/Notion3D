@@ -90,6 +90,7 @@ class GatewayAdapter(AgentAdapter):
         region: str | None = None,
         turn_id: str | None = None,
         latest_version: int | None = None,
+        images: list[dict[str, str]] | None = None,
     ) -> AgentSessionHandle:
         logical_id = session_id or self.session_key(project_id)
         prompt = build_agent_prompt(
@@ -99,6 +100,11 @@ class GatewayAdapter(AgentAdapter):
             region=region,
             latest_version=latest_version,
         )
+        if images:
+            prompt = (
+                f"{prompt}\n\n用户附带了 {len(images)} 张截图。"
+                "若 gateway 不支持视觉，请结合 wait_job 的 spatial_summary 与 validation_warnings 验收。"
+            )
         url = f"{self._base_url()}/v1/runs"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(

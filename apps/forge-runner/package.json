@@ -5,7 +5,9 @@
   "type": "module",
   "description": "ForgeCAD export runner for Notion3D Engine",
   "scripts": {
-    "export": "node export-parts.mjs"
+    "postinstall": "node scripts/ensure-forgecad-solver.mjs",
+    "export": "node export-parts.mjs",
+    "test": "node --test test/*.test.mjs"
   },
   "dependencies": {
     "forgecad": "github:symbiontarch/ForgeCAD#mainline"

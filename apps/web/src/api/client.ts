@@ -7,6 +7,13 @@ export type Project = {
   web_url?: string | null;
 };
 
+export type ChatImage = {
+  id: string;
+  url: string;
+  mime_type: string;
+  filename?: string | null;
+};
+
 export type ChatMessage = {
   id: string;
   role: "user" | "assistant" | "system";
@@ -14,6 +21,13 @@ export type ChatMessage = {
   created_at: string;
   turn_id?: string | null;
   job_id?: string | null;
+  images?: ChatImage[];
+};
+
+export type TurnImage = {
+  data: string;
+  mime_type?: string;
+  filename?: string | null;
 };
 
 export type Job = {
@@ -30,6 +44,12 @@ export type Job = {
   stl_ready?: boolean;
   error?: string | null;
   validation_warnings?: string[];
+  spatial_digest?: {
+    part_count?: number;
+    summary?: string;
+    warnings?: string[];
+    review_checklist?: string[];
+  } | null;
   web_url?: string | null;
   created_at: string;
   updated_at: string;
@@ -117,6 +137,16 @@ export type DesignTurn = {
   review_notes?: string[];
 };
 
+export type AgentActivityStep = {
+  id: string;
+  kind: string;
+  label: string;
+  detail?: string | null;
+  status: "running" | "done" | "error" | string;
+  tool?: string | null;
+  at?: string | null;
+};
+
 export type AgentStatus = {
   active: boolean;
   turn_id?: string | null;
@@ -126,6 +156,7 @@ export type AgentStatus = {
   status?: string | null;
   external_url?: string | null;
   active_job_id?: string | null;
+  activity?: AgentActivityStep[];
 };
 
 export type ProjectCapabilities = {
@@ -255,6 +286,7 @@ export const sendTurn = (
   content: string,
   pick?: ModelPick | null,
   region?: string | null,
+  images?: TurnImage[] | null,
 ) =>
   request<Turn>(`/api/projects/${projectId}/turn`, {
     method: "POST",
@@ -262,6 +294,7 @@ export const sendTurn = (
       content,
       pick: pick ?? undefined,
       region: region ?? undefined,
+      images: images?.length ? images : undefined,
     }),
   });
 

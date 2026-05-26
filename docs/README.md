@@ -26,7 +26,7 @@
 | 文档 | 说明 |
 |------|------|
 | [architecture.md](architecture.md) | 模块边界、Design Turn、API / MCP |
-| [design-pipeline.md](design-pipeline.md) | intake → plan → author → render → review |
+| [design-pipeline.md](design-pipeline.md) | render-first 建模循环 |
 | [cad-backend-v2.md](cad-backend-v2.md) | ForgeCAD 安装与渲染 |
 
 Skills：`.cursor/skills/*/SKILL.md`

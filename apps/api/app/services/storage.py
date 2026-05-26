@@ -112,6 +112,19 @@ def version_dir(project_id: str, version: int) -> Path:
     return path
 
 
+def project_attachments_dir(project_id: str, message_id: str) -> Path:
+    path = _project_dir(project_id) / "attachments" / message_id
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def attachment_file_path(project_id: str, message_id: str, filename: str) -> Path | None:
+    if ".." in filename.replace("\\", "/") or "/" in filename.replace("\\", "/"):
+        return None
+    target = project_attachments_dir(project_id, message_id) / filename
+    return target if target.is_file() else None
+
+
 def append_message(
     project_id: str,
     role: MessageRole,
@@ -119,17 +132,21 @@ def append_message(
     *,
     turn_id: str | None = None,
     job_id: str | None = None,
+    message_id: str | None = None,
+    images: list[dict] | None = None,
 ) -> dict:
     messages_file = _messages_path(project_id)
     messages = json.loads(messages_file.read_text()) if messages_file.exists() else []
     msg = {
-        "id": str(uuid.uuid4()),
+        "id": message_id or str(uuid.uuid4()),
         "role": role.value,
         "content": content,
         "created_at": _utcnow().isoformat(),
         "turn_id": turn_id,
         "job_id": job_id,
     }
+    if images:
+        msg["images"] = images
     messages.append(msg)
     atomic_write_text(messages_file, json.dumps(messages, ensure_ascii=False, indent=2))
     _notify_project_state(project_id)

@@ -45,6 +45,7 @@ def job_to_out(job: dict) -> JobOut:
         stl_ready=bool(job.get("stl_ready")),
         error=error,
         validation_warnings=job.get("validation_warnings") or [],
+        spatial_digest=job.get("spatial_digest"),
         created_at=datetime.fromisoformat(job["created_at"]),
         updated_at=datetime.fromisoformat(job["updated_at"]),
         web_url=project_web_url(project_id),

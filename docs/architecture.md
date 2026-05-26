@@ -48,7 +48,7 @@ Engine 使用 **JSON 文件持久化**（`data/projects/`、`data/jobs/`），Jo
 ## Design Turn
 
 ```
-intake → plan → author → render → review → done | blocked
+author → render → done   （render-first；plan/review 可选归档）
 ```
 
 Engine 兜底见 [design-pipeline.md](design-pipeline.md)。

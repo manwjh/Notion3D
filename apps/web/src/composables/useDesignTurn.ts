@@ -31,7 +31,7 @@ export function mergeSessionPhase(
       detail: "正在建模…",
       busy: true,
       lane: "agent",
-      designPhase: designPhase ?? "intake",
+      designPhase: designPhase ?? "author",
     };
   }
   return {

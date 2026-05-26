@@ -29,7 +29,11 @@ async def _bridge_ready() -> bool:
         if resp.status_code != 200:
             return False
         data = resp.json()
-        return bool(data.get("api_ready") or data.get("cursor_api_ready"))
+        return bool(
+            data.get("api_ready")
+            or data.get("api_key_configured")
+            or data.get("cursor_api_ready")
+        )
     except Exception:
         return False
 
@@ -78,6 +82,7 @@ class BridgeAdapter(AgentAdapter):
         region: str | None = None,
         turn_id: str | None = None,
         latest_version: int | None = None,
+        images: list[dict[str, str]] | None = None,
     ) -> AgentSessionHandle:
         logical_id = session_id or self.session_key(project_id)
         prompt = build_agent_prompt(
@@ -87,11 +92,20 @@ class BridgeAdapter(AgentAdapter):
             region=region,
             latest_version=latest_version,
         )
+        payload: dict = {"agentId": logical_id, "prompt": prompt}
+        if images:
+            payload["images"] = [
+                {
+                    "data": img.get("data") or "",
+                    "mimeType": img.get("mime_type") or img.get("mimeType") or "image/png",
+                }
+                for img in images
+            ]
         url = f"{settings.web_turn_bridge_base.rstrip('/')}/v1/turn"
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 url,
-                json={"agentId": logical_id, "prompt": prompt},
+                json=payload,
             )
         if resp.status_code >= 400:
             raise AgentAdapterError(f"Web Turn bridge {resp.status_code}: {resp.text[:500]}")

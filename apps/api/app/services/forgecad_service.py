@@ -17,6 +17,7 @@ from app.services.cad_types import CadError, RenderResult
 class ForgeExportSummary:
     objects: int = 0
     parts: list[dict] = field(default_factory=list)
+    assembly_warnings: list[str] = field(default_factory=list)
 
 
 def forgecad_available() -> bool:
@@ -26,6 +27,15 @@ def forgecad_available() -> bool:
     if not runner.exists():
         return False
     forge_pkg = settings.forge_runner_dir / "node_modules" / "forgecad" / "dist-cli" / "forgecad.js"
+    solver_wasm = (
+        settings.forge_runner_dir / "node_modules" / "forgecad" / "solver" / "pkg" / "solver_bg.wasm"
+    )
+    if not solver_wasm.exists():
+        solver_wasm = (
+            settings.forge_runner_dir / "node_modules" / "forgecad" / "dist-cli" / "solver_bg.wasm"
+        )
+    if forge_pkg.exists() and not solver_wasm.exists():
+        return False
     return forge_pkg.exists() or shutil.which(settings.forgecad_bin) is not None
 
 
@@ -179,6 +189,8 @@ async def render_forge(
         warnings.append("ForgeCAD 导出未识别到命名部件，预览可能为单体网格")
     elif summary.objects < 3:
         warnings.append(f"ForgeCAD 导出 {summary.objects} 个部件，复杂装配建议 ≥3 个命名 part")
+    if summary.assembly_warnings:
+        warnings.extend(summary.assembly_warnings)
 
     return RenderResult(path=stl_path, warnings=warnings)
 
@@ -193,6 +205,7 @@ def _parse_summary(stdout_text: str) -> ForgeExportSummary:
             return ForgeExportSummary(
                 objects=int(data.get("objects") or 0),
                 parts=list(data.get("parts") or []),
+                assembly_warnings=list(data.get("assembly_warnings") or []),
             )
         except json.JSONDecodeError:
             continue

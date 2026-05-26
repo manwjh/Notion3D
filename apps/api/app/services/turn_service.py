@@ -32,11 +32,28 @@ def format_user_text(body: AgentTurnIn) -> str:
         else:
             label = body.pick.label or f"({body.pick.x:.1f}, {body.pick.y:.1f}, {body.pick.z:.1f})"
             user_text = f"{body.content}\n\n📍 3D 点选：{label}"
+    if body.images:
+        user_text = (
+            f"{user_text}\n\n🖼 用户附带了 {len(body.images)} 张截图"
+            "（已传入视觉通道；请对照预览、spatial_digest 与 validation_warnings 决定是否继续改 forge）。"
+        )
     return user_text
 
 
 async def finish_agent_run(project_id: str, pending: dict) -> None:
     turn_id = pending.get("turn_id")
+    meta = storage.load_meta(project_id)
+    live = meta.get("agent_run_pending")
+    if not live or live.get("run_id") != pending.get("run_id"):
+        return
+    if turn_id:
+        for msg in reversed(storage.list_messages(project_id)):
+            if msg.get("turn_id") != turn_id:
+                continue
+            if msg.get("role") in ("assistant", "system"):
+                storage.update_project_meta(project_id, agent_run_pending=None)
+                return
+
     provider_id = pending["provider"]
     adapter = get_adapter(provider_id)
     if not adapter:
@@ -82,6 +99,14 @@ async def finish_agent_run(project_id: str, pending: dict) -> None:
         if turn_id:
             design_turn.set_agent_failed(project_id, turn_id)
     finally:
+        from app.services import agent_activity, project_events
+        from app.services.web_turn_config import WEB_TURN_BRIDGE
+
+        if provider_id == WEB_TURN_BRIDGE and pending.get("run_id"):
+            activity = await agent_activity.fetch_bridge_activity(pending["run_id"])
+            if activity:
+                storage.update_project_meta(project_id, agent_activity=activity)
+                project_events.notify(project_id)
         storage.update_project_meta(project_id, agent_run_pending=None)
 
 
@@ -94,12 +119,27 @@ async def handle_turn(
     """Route turn to agent. Callers inject background task starter to avoid circular imports."""
     user_text = format_user_text(body)
     turn_id = str(uuid.uuid4())
+    message_id = str(uuid.uuid4())
+    saved_images: list[dict] = []
+    if body.images:
+        from app.services import message_attachments
+
+        saved_images = message_attachments.save_turn_images(
+            project_id,
+            message_id,
+            [img.model_dump() for img in body.images],
+        )
     user_msg = storage.append_message(
         project_id,
         MessageRole.user,
         user_text,
         turn_id=turn_id,
+        message_id=message_id,
+        images=saved_images or None,
     )
+    from app.services import agent_activity
+
+    agent_activity.clear_agent_activity(project_id)
     design_turn.begin_turn(project_id, user_msg["id"], turn_id=turn_id)
 
     await refresh_provider_cache()
@@ -138,6 +178,7 @@ async def handle_turn(
             region=region,
             turn_id=turn_id,
             latest_version=latest_version,
+            images=[img.model_dump() for img in body.images] if body.images else None,
         )
         pending = {
             "provider": handle.provider,

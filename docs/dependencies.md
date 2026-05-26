@@ -43,7 +43,7 @@ make install
 |------|----------------|------|
 | `apps/api` | FastAPI, uvicorn, pydantic, httpx, aiofiles | Engine REST，无 LLM SDK |
 | `apps/mcp-server` | `mcp`, httpx, starlette | 暴露 `notion3d_*` tools |
-| `apps/forge-runner` | `forgecad` ← `github:symbiontarch/ForgeCAD#mainline` | CLI + ForgeCAD Studio |
+| `apps/forge-runner` | `forgecad` ← GitHub `mainline` + vendored `solver/pkg`（postinstall） | CLI + WASM 约束求解 |
 | `apps/web` | Vue 3, Vite, Three.js, marked | 三栏工作台 |
 | `apps/agent-bridge` | `@cursor/sdk` | 仅 bridge sidecar；调 Cursor 云端 Agent |
 
@@ -175,7 +175,7 @@ gateway：`curl -s http://127.0.0.1:8642/health`
 
 | 现象 | 检查 |
 |------|------|
-| `forgecad_available: false` | `cd apps/forge-runner && npm install` |
+| `forgecad_available: false` | `cd apps/forge-runner && npm install`（需存在 `solver/pkg/solver_bg.wasm`） |
 | bridge 启动失败 | `CURSOR_API_KEY`；`python -c "import notion3d_mcp"` |
 | gateway 启动失败 | `which hermes`；gateway 宿主 API key |
 | MCP 工具失败 | Engine `:8000`；MCP env 与 `NOTION3D_WEB_BASE` 一致 |
