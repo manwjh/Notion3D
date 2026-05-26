@@ -63,19 +63,21 @@ function openFile(filePath: string) {
 
 <template>
   <aside class="structure-panel">
-    <PartTreePanel
-      :parts="parts"
-      :pick="pick"
-      :hidden="hidden"
-      :opacities="opacities"
-      @pick="emit('pick', $event)"
-      @toggle="emit('toggle', $event)"
-      @opacity="(id, v) => emit('opacity', id, v)"
-      @focus="emit('focus', $event)"
-      @show-all="emit('showAll')"
-      @fit-all="emit('fitAll')"
-      @shell-mode="emit('shellMode')"
-    />
+    <div class="part-tree-section">
+      <PartTreePanel
+        :parts="parts"
+        :pick="pick"
+        :hidden="hidden"
+        :opacities="opacities"
+        @pick="emit('pick', $event)"
+        @toggle="emit('toggle', $event)"
+        @opacity="(id, v) => emit('opacity', id, v)"
+        @focus="emit('focus', $event)"
+        @show-all="emit('showAll')"
+        @fit-all="emit('fitAll')"
+        @shell-mode="emit('shellMode')"
+      />
+    </div>
 
     <section v-if="files.length" class="structure-section structure-files">
       <div class="structure-section-head">文件</div>
@@ -114,6 +116,21 @@ function openFile(filePath: string) {
   min-height: 0;
   overflow: hidden;
   background: var(--bg-surface);
+}
+
+.part-tree-section {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: min(320px, 38vh);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-bottom: 1px solid var(--border);
+}
+
+.part-tree-section:last-child {
+  flex: 1 1 0;
+  max-height: none;
 }
 
 .structure-section {
@@ -168,5 +185,11 @@ function openFile(filePath: string) {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+@media (max-width: 1024px) {
+  .part-tree-section:not(:last-child) {
+    max-height: min(420px, 46vh);
+  }
 }
 </style>

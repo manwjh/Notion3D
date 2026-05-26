@@ -29,7 +29,7 @@ dev-help:
 
 dev: stop
 	@chmod +x scripts/dev.sh
-	@$(WITH_ENV) WEB_TURN=$(WEB_TURN) bash scripts/dev.sh
+	@$(WITH_ENV) bash -c 'WEB_TURN=$(WEB_TURN) bash scripts/dev.sh'
 
 dev-bridge:
 	$(MAKE) dev WEB_TURN=bridge
@@ -60,4 +60,5 @@ stop:
 
 test:
 	cd apps/api && $(PYTHON) -m pytest -q
+	cd apps/web && npm run build
 	bash templates/scripts/validate-all.sh

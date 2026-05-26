@@ -28,6 +28,8 @@
 | `notion3d_save_template` | 版本另存为用户模板 |
 | `notion3d_list_messages` | 对话历史 |
 | `notion3d_get_design_state` | 当前 turn phase / plan / review |
+| `notion3d_get_project_state` | 统一快照（messages / turn / job / agent） |
+| `notion3d_wait_agent` | 等待 Web Turn Agent 结束（`agent.active` → false） |
 
 ## 异步流程
 

@@ -95,6 +95,8 @@ Agent 宿主配置 **notion3d-mcp** 指向 Engine：
 | `bridge` | `CURSOR_API_KEY` + `notion3d-mcp`（sidecar 内） | [web-turn-bridge.md](web-turn-bridge.md) |
 | `gateway` | gateway CLI + API key + 宿主 MCP/LLM | [web-turn-gateway.md](web-turn-gateway.md) |
 
+浏览器内对话时，外部脚本或第二 Agent 可用 MCP **`notion3d_wait_agent`** 等待本轮 Web Turn 结束（SSE + 轮询降级）；快照用 **`notion3d_get_project_state`**。详见 [web-turn-bridge.md § MCP 辅助工具](web-turn-bridge.md#mcp-辅助工具web-turn)。
+
 ## 接口 3：手动编辑
 
 `make dev` 即可。Web 左栏改 Forge 参数/代码/部件精修，不经 LLM。

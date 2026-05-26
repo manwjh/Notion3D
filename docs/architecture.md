@@ -27,6 +27,14 @@ Notion3D = **ForgeCAD 装配渲染引擎** + **Web 工作台**。不含 LLM。
 
 渲染细节见 [cad-backend-v2.md](cad-backend-v2.md)。**依赖、LLM 归属、环境变量**见 [dependencies.md](dependencies.md)。
 
+## 部署模型（Local / LAN）
+
+Engine 使用 **JSON 文件持久化**（`data/projects/`、`data/jobs/`），Job 状态在进程内缓存。设计假设：
+
+- **单 uvicorn 进程**（`make dev` / Docker 默认 CMD 均如此）
+- **无 API 鉴权** — 适合本机 `localhost` 或受控局域网
+- 多 worker、多实例、公网 SaaS 需另行引入共享存储与鉴权（见 [dev-modes.md](dev-modes.md) § Engine 部署约束）
+
 ## 客户端路径（平行）
 
 | 路径 | 技术接口 | 说明 |
@@ -68,6 +76,7 @@ Engine 兜底见 [design-pipeline.md](design-pipeline.md)。
 | GET | `/api/projects` | 项目列表 |
 | POST | `/api/projects` | 创建项目 |
 | GET | `/api/projects/{id}/state` | 快照（messages、job、capabilities） |
+| GET | `/api/projects/{id}/state/events` | 项目状态 SSE（Web Agent 对话进度） |
 
 ### Web 对话
 
@@ -88,6 +97,7 @@ Engine 兜底见 [design-pipeline.md](design-pipeline.md)。
 |------|------|------|
 | POST | `/api/projects/{id}/render-forge` | 提交 ForgeCAD |
 | GET | `/api/projects/{id}/jobs/{job_id}` | Job 状态 |
+| GET | `/api/projects/{id}/jobs/{job_id}/events` | Job SSE 推送（Web / MCP 实时进度） |
 
 ### 版本与产物
 
@@ -102,7 +112,7 @@ Engine 兜底见 [design-pipeline.md](design-pipeline.md)。
 
 真源：`apps/mcp-server/notion3d_mcp/server.py`。完整列表：
 
-`notion3d_health` · `notion3d_report_design_plan` · `notion3d_render_forge` · `notion3d_wait_job` · `notion3d_report_design_review` · `notion3d_get_forge_sources` · `notion3d_apply_template` · `notion3d_list_projects` · `notion3d_create_project` · `notion3d_get_job` · `notion3d_list_active_jobs` · `notion3d_list_versions` · `notion3d_list_templates` · `notion3d_get_template` · `notion3d_save_template` · `notion3d_list_messages` · `notion3d_get_design_state`
+`notion3d_health` · `notion3d_report_design_plan` · `notion3d_render_forge` · `notion3d_wait_job` · `notion3d_report_design_review` · `notion3d_get_forge_sources` · `notion3d_apply_template` · `notion3d_list_projects` · `notion3d_create_project` · `notion3d_get_job` · `notion3d_list_active_jobs` · `notion3d_list_versions` · `notion3d_list_templates` · `notion3d_get_template` · `notion3d_save_template` · `notion3d_list_messages` · `notion3d_get_design_state` · `notion3d_get_project_state` · `notion3d_wait_agent`
 
 主路径：`notion3d_health` · `report_design_plan` · `render_forge` · `wait_job` · `report_design_review`
 

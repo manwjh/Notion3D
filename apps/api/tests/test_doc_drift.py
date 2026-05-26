@@ -8,6 +8,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 SERVER_PY = REPO_ROOT / "apps/mcp-server/notion3d_mcp/server.py"
+MCP_CLIENT_PY = REPO_ROOT / "apps/mcp-server/notion3d_mcp/client.py"
+WEB_CLIENT_TS = REPO_ROOT / "apps/web/src/api/client.ts"
 MCP_SKILL = REPO_ROOT / ".cursor/skills/notion3d-mcp/SKILL.md"
 AGENTS_MD = REPO_ROOT / "AGENTS.md"
 ARCHITECTURE_MD = REPO_ROOT / "docs/architecture.md"
@@ -38,7 +40,7 @@ def _mcp_tools_from_server() -> frozenset[str]:
 
 def test_mcp_server_has_expected_tool_count():
     tools = _mcp_tools_from_server()
-    assert len(tools) == 17, f"expected 17 MCP tools, found {len(tools)}: {sorted(tools)}"
+    assert len(tools) == 19, f"expected 19 MCP tools, found {len(tools)}: {sorted(tools)}"
 
 
 def test_mcp_skill_documents_all_tools():
@@ -69,6 +71,61 @@ KEY_API_PATHS = (
     "/api/projects/{id}/versions/{v}/forge-preview",
     "/api/templates",
 )
+
+# Web workbench client.ts — must stay aligned with Engine routes the UI calls.
+WEB_CLIENT_ROUTE_TEMPLATES = (
+    "/health",
+    "/api/projects",
+    "/api/projects/${projectId}/render-forge",
+    "/api/projects/${projectId}/versions/${version}/forge-preview",
+    "/api/projects/${projectId}/state",
+    "/api/projects/${projectId}/state/events",
+    "/api/projects/${projectId}/turn",
+    "/api/projects/${projectId}/jobs/${jobId}",
+    "/api/projects/${projectId}/jobs/${jobId}/events",
+    "/api/projects/${projectId}/jobs/active",
+    "/api/projects/${projectId}/versions/${version}/resume-stl",
+    "/api/projects/${projectId}/versions",
+)
+
+MCP_CLIENT_ROUTE_TEMPLATES = (
+    "/health",
+    "/api/projects",
+    "/api/projects/{project_id}/render-forge",
+    "/api/projects/{project_id}/jobs/{job_id}",
+    "/api/projects/{project_id}/jobs/{job_id}/events",
+    "/api/projects/{project_id}/messages",
+    "/api/projects/{project_id}/jobs/active",
+    "/api/projects/{project_id}/versions",
+    "/api/projects/{project_id}/versions/{version}/forge-sources",
+    "/api/templates",
+    "/api/templates/{template_id}",
+    "/api/templates/{template_id}/apply",
+    "/api/projects/{project_id}/versions/{version}/save-template",
+    "/api/projects/{project_id}/design/plan",
+    "/api/projects/{project_id}/design/review",
+    "/api/projects/{project_id}/design/state",
+    "/api/projects/{project_id}/state",
+    "/api/projects/{project_id}/state/events",
+)
+
+
+def _web_client_text() -> str:
+    assert WEB_CLIENT_TS.is_file(), f"missing web client: {WEB_CLIENT_TS}"
+    return WEB_CLIENT_TS.read_text(encoding="utf-8")
+
+
+def test_web_client_documents_required_routes():
+    text = _web_client_text()
+    missing = [route for route in WEB_CLIENT_ROUTE_TEMPLATES if route not in text]
+    assert not missing, f"apps/web/src/api/client.ts missing routes: {missing}"
+
+
+def test_mcp_client_documents_required_routes():
+    assert MCP_CLIENT_PY.is_file(), f"missing MCP client: {MCP_CLIENT_PY}"
+    text = MCP_CLIENT_PY.read_text(encoding="utf-8")
+    missing = [route for route in MCP_CLIENT_ROUTE_TEMPLATES if route not in text]
+    assert not missing, f"notion3d_mcp/client.py missing routes: {missing}"
 
 
 def test_architecture_md_documents_key_api_paths():

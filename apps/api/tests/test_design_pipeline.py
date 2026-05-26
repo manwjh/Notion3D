@@ -186,3 +186,41 @@ def test_auto_pass_review_when_agent_replied(client, project_id):
     assert design_turn.get_active_turn(project_id) is None
     turn_meta = client.get(f"/api/projects/{project_id}/design/state").json()
     assert turn_meta is None
+
+
+def test_turn_out_heals_stale_render_phase(project_id):
+    from app.services import job_store
+
+    design_turn.begin_turn(project_id, "msg-10", turn_id="turn-10")
+    design_turn.register_job(project_id, "turn-10", "job-10", prompt="测试")
+    job_store.save_job(
+        {
+            "id": "job-10",
+            "project_id": project_id,
+            "turn_id": "turn-10",
+            "status": "succeeded",
+            "version": 1,
+            "kind": "render",
+            "prompt": "测试",
+            "created_at": "2026-01-01T00:00:00+00:00",
+            "updated_at": "2026-01-01T00:00:01+00:00",
+        }
+    )
+
+    turn = design_turn.turn_out(project_id, active_job=None)
+    assert turn is not None
+    assert turn.render_phase == "done"
+    assert turn.version == 1
+
+
+def test_turn_out_heals_stale_agent_phase(project_id):
+    design_turn.begin_turn(project_id, "msg-11", turn_id="turn-11")
+    design_turn._patch_turn(
+        project_id,
+        agent_phase="running",
+        assistant_message_id="asst-11",
+    )
+
+    turn = design_turn.turn_out(project_id, active_job=None)
+    assert turn is not None
+    assert turn.agent_phase == "replied"

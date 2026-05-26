@@ -6,6 +6,7 @@ from pathlib import Path
 
 from app.config import settings
 from app.models.schemas import MessageRole, ProjectOut
+from app.services.atomic_io import atomic_write_text
 from app.services.links import project_web_url
 
 
@@ -49,8 +50,8 @@ def create_project(name: str) -> ProjectOut:
         "updated_at": now.isoformat(),
         "latest_version": None,
     }
-    _meta_path(project_id).write_text(json.dumps(meta, ensure_ascii=False, indent=2))
-    _messages_path(project_id).write_text("[]")
+    atomic_write_text(_meta_path(project_id), json.dumps(meta, ensure_ascii=False, indent=2))
+    atomic_write_text(_messages_path(project_id), "[]")
 
     return _project_from_meta(meta)
 
@@ -92,7 +93,8 @@ def update_project_meta(project_id: str, **kwargs) -> None:
     meta = json.loads(meta_file.read_text())
     meta.update(kwargs)
     meta["updated_at"] = _utcnow().isoformat()
-    meta_file.write_text(json.dumps(meta, ensure_ascii=False, indent=2))
+    atomic_write_text(meta_file, json.dumps(meta, ensure_ascii=False, indent=2))
+    _notify_project_state(project_id)
 
 
 def next_version(project_id: str) -> int:
@@ -129,8 +131,15 @@ def append_message(
         "job_id": job_id,
     }
     messages.append(msg)
-    messages_file.write_text(json.dumps(messages, ensure_ascii=False, indent=2))
+    atomic_write_text(messages_file, json.dumps(messages, ensure_ascii=False, indent=2))
+    _notify_project_state(project_id)
     return msg
+
+
+def _notify_project_state(project_id: str) -> None:
+    from app.services import project_events
+
+    project_events.notify(project_id)
 
 
 def list_messages(project_id: str) -> list[dict]:

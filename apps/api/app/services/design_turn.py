@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.models.schemas import DesignPhase, DesignTurnOut, JobStatus, MessageRole, PlanStrategy, ReviewStatus, TaskClass
-from app.services import storage
+from app.services import job_store, storage
 
 TERMINAL_DESIGN_PHASES = frozenset({DesignPhase.done.value, DesignPhase.blocked.value})
 MAX_DESIGN_REVISION = 2
@@ -365,9 +365,40 @@ def maybe_finalize_turn(project_id: str) -> None:
         storage.update_project_meta(project_id, active_turn=None)
 
 
+def _heal_stale_render_phase(project_id: str) -> None:
+    """If render finished but turn meta still says running, sync from stored job."""
+    turn = get_active_turn(project_id)
+    if not turn or turn.get("render_phase") != "running":
+        return
+    job_id = turn.get("job_id")
+    if not job_id:
+        return
+    job = job_store.load_job(job_id)
+    if not job:
+        return
+    if job.get("status") in (JobStatus.succeeded.value, JobStatus.failed.value):
+        sync_render_from_job(project_id, job)
+
+
+def _heal_stale_agent_phase(project_id: str) -> None:
+    """If agent run ended but turn meta still says running, sync from stored messages."""
+    turn = get_active_turn(project_id)
+    if not turn or turn.get("agent_phase") != "running":
+        return
+    meta = storage.load_meta(project_id)
+    if meta.get("agent_run_pending"):
+        return
+    if turn.get("assistant_message_id"):
+        _patch_turn(project_id, agent_phase="replied")
+        maybe_finalize_turn(project_id)
+
+
 def turn_out(project_id: str, active_job: dict | None = None) -> DesignTurnOut | None:
     if active_job:
         sync_render_from_job(project_id, active_job)
+    else:
+        _heal_stale_render_phase(project_id)
+    _heal_stale_agent_phase(project_id)
     turn = get_active_turn(project_id)
     if not turn:
         return None

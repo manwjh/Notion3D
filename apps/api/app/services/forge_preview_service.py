@@ -31,6 +31,26 @@ def _studio_available() -> bool:
     return dist.exists()
 
 
+def _dev_runtime_available() -> bool:
+    vite = (
+        settings.forge_runner_dir
+        / "node_modules"
+        / "forgecad"
+        / "node_modules"
+        / "vite"
+        / "bin"
+        / "vite.js"
+    )
+    return vite.exists()
+
+
+def preview_studio_available() -> bool:
+    """True when ForgeCAD Studio can be served (dist build or dev runtime)."""
+    if not forgecad_available():
+        return False
+    return _studio_available() or _dev_runtime_available()
+
+
 def preview_workspace(project_id: str) -> Path:
     return settings.data_dir / "forge-preview" / project_id
 

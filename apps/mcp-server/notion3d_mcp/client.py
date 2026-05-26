@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import time
-from typing import Any
+from typing import Any, Iterator
 
 import httpx
 
@@ -13,15 +14,31 @@ API_BASE = os.environ.get("NOTION3D_API_BASE", "http://127.0.0.1:8000").rstrip("
 DEFAULT_TIMEOUT = float(os.environ.get("NOTION3D_MCP_TIMEOUT", "30"))
 JOB_POLL_INTERVAL = float(os.environ.get("NOTION3D_MCP_POLL_INTERVAL", "1.0"))
 JOB_POLL_MAX = float(os.environ.get("NOTION3D_MCP_POLL_MAX", "600"))
+TERMINAL_JOB_STATUSES = frozenset({"succeeded", "failed"})
 
 
 class Notion3DClient:
-    def __init__(self, base_url: str | None = None, timeout: float = DEFAULT_TIMEOUT) -> None:
+    def __init__(
+        self,
+        base_url: str | None = None,
+        timeout: float = DEFAULT_TIMEOUT,
+        *,
+        http_client: httpx.Client | None = None,
+    ) -> None:
         self.base_url = (base_url or API_BASE).rstrip("/")
         self.timeout = timeout
+        self._external_client = http_client
 
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
+
+    @contextlib.contextmanager
+    def _http(self, timeout: float | None = None) -> Iterator[httpx.Client]:
+        if self._external_client is not None:
+            yield self._external_client
+            return
+        with httpx.Client(timeout=timeout or self.timeout) as client:
+            yield client
 
     def request(
         self,
@@ -31,7 +48,7 @@ class Notion3DClient:
         json_body: dict | None = None,
         timeout: float | None = None,
     ) -> Any:
-        with httpx.Client(timeout=timeout or self.timeout) as client:
+        with self._http(timeout=timeout) as client:
             resp = client.request(method, self._url(path), json=json_body)
             if resp.status_code >= 400:
                 detail = resp.text
@@ -89,6 +106,39 @@ class Notion3DClient:
             f"/api/projects/{project_id}/versions/{version}/forge-sources",
         )
 
+    def _wait_job_sse(
+        self,
+        project_id: str,
+        job_id: str,
+        *,
+        max_wait: float,
+    ) -> dict | None:
+        path = f"/api/projects/{project_id}/jobs/{job_id}/events"
+        deadline = time.monotonic() + max_wait
+        last: dict | None = None
+
+        try:
+            with self._http(timeout=max(max_wait, 30.0)) as client:
+                with client.stream("GET", self._url(path)) as response:
+                    if response.status_code >= 400:
+                        return None
+                    for line in response.iter_lines():
+                        if time.monotonic() >= deadline:
+                            break
+                        if not line or not line.startswith("data: "):
+                            continue
+                        last = json.loads(line.removeprefix("data: "))
+                        if last.get("status") in TERMINAL_JOB_STATUSES:
+                            return last
+        except Exception:
+            if last and last.get("status") in TERMINAL_JOB_STATUSES:
+                return last
+            return None
+
+        if last and last.get("status") in TERMINAL_JOB_STATUSES:
+            return last
+        return None
+
     def wait_job(
         self,
         project_id: str,
@@ -97,13 +147,21 @@ class Notion3DClient:
         poll_interval: float = JOB_POLL_INTERVAL,
         max_wait: float = JOB_POLL_MAX,
     ) -> dict:
+        job = self.get_job(project_id, job_id)
+        if job.get("status") in TERMINAL_JOB_STATUSES:
+            return job
+
+        streamed = self._wait_job_sse(project_id, job_id, max_wait=max_wait)
+        if streamed is not None:
+            return streamed
+
         deadline = time.monotonic() + max_wait
+        current = job
         while time.monotonic() < deadline:
-            job = self.get_job(project_id, job_id)
-            status = job.get("status")
-            if status in ("succeeded", "failed"):
-                return job
+            if current.get("status") in TERMINAL_JOB_STATUSES:
+                return current
             time.sleep(poll_interval)
+            current = self.get_job(project_id, job_id)
         raise TimeoutError(f"Job {job_id} did not finish within {max_wait}s")
 
     def list_templates(
@@ -218,6 +276,63 @@ class Notion3DClient:
 
     def get_design_state(self, project_id: str) -> dict | None:
         return self.request("GET", f"/api/projects/{project_id}/design/state")
+
+    def get_project_state(self, project_id: str) -> dict:
+        return self.request("GET", f"/api/projects/{project_id}/state")
+
+    def _wait_project_state_sse(
+        self,
+        project_id: str,
+        *,
+        max_wait: float,
+    ) -> dict | None:
+        path = f"/api/projects/{project_id}/state/events"
+        deadline = time.monotonic() + max_wait
+        last: dict | None = None
+
+        try:
+            with self._http(timeout=max(max_wait, 30.0)) as client:
+                with client.stream("GET", self._url(path)) as response:
+                    if response.status_code >= 400:
+                        return None
+                    for line in response.iter_lines():
+                        if time.monotonic() >= deadline:
+                            break
+                        if not line or not line.startswith("data: "):
+                            continue
+                        last = json.loads(line.removeprefix("data: "))
+                        if not last.get("agent", {}).get("active"):
+                            return last
+        except Exception:
+            if last and not last.get("agent", {}).get("active"):
+                return last
+            return None
+
+        if last and not last.get("agent", {}).get("active"):
+            return last
+        return None
+
+    def wait_agent(
+        self,
+        project_id: str,
+        *,
+        poll_interval: float = 2.0,
+        max_wait: float = JOB_POLL_MAX,
+    ) -> dict:
+        state = self.get_project_state(project_id)
+        if not state.get("agent", {}).get("active"):
+            return state
+
+        streamed = self._wait_project_state_sse(project_id, max_wait=max_wait)
+        if streamed is not None:
+            return streamed
+
+        deadline = time.monotonic() + max_wait
+        current = state
+        while current.get("agent", {}).get("active") and time.monotonic() < deadline:
+            time.sleep(poll_interval)
+            current = self.get_project_state(project_id)
+        return current
 
 
 def format_json(data: Any) -> str:

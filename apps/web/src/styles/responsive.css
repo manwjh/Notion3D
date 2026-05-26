@@ -17,10 +17,6 @@
 }
 
 @media (max-width: 640px) {
-  .brand-subtitle {
-    display: none;
-  }
-
   .topbar {
     padding:
       max(0.45rem, env(safe-area-inset-top))

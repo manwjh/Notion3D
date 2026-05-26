@@ -340,7 +340,7 @@
 }
 
 .viewer-root--pick {
-  outline: 2px solid rgba(255, 204, 102, 0.35);
+  outline: 2px solid rgba(110, 168, 254, 0.35);
   outline-offset: -2px;
 }
 
@@ -350,19 +350,13 @@
   left: 50%;
   transform: translateX(-50%);
   z-index: 3;
-  font-size: 0.75rem;
-  color: #ffcc66;
-  background: rgba(0, 0, 0, 0.65);
-  padding: 0.3rem 0.65rem;
+  font-size: 0.72rem;
+  color: #aeb6c8;
+  background: rgba(20, 24, 32, 0.82);
+  padding: 0.28rem 0.65rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 204, 102, 0.35);
+  border: 1px solid rgba(110, 168, 254, 0.25);
   pointer-events: none;
-}
-
-.action-btn--pick.active {
-  background: rgba(255, 204, 102, 0.15);
-  border-color: rgba(255, 204, 102, 0.55);
-  color: #ffcc66;
 }
 
 .param-panel {

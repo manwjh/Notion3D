@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from app.config import settings
+from app.services.atomic_io import atomic_write_text
 
 ACTIVE_STATUSES = frozenset({"pending", "running"})
 
@@ -14,7 +15,7 @@ def save_job(job: dict) -> None:
     directory = _jobs_dir()
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{job['id']}.json"
-    path.write_text(json.dumps(job, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(path, json.dumps(job, ensure_ascii=False, indent=2))
 
 
 def load_job(job_id: str) -> dict | None:

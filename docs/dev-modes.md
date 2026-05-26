@@ -17,6 +17,20 @@ make dev WEB_TURN=gateway   # + gateway sidecar :8642
 
 接口详解：[agents/README.md](agents/README.md)
 
+## Engine 部署约束（Local / LAN）
+
+Notion3D Engine 面向**单实例、本机或局域网**工作台。当前版本 intentionally 不包含：
+
+| 能力 | 状态 | 说明 |
+|------|------|------|
+| 多 worker / 水平扩展 | 不支持 | Job 内存缓存 + JSON 文件；勿 `uvicorn --workers N` |
+| 数据库 / 消息队列 | 无 | 数据在 `NOTION3D_DATA_DIR`（默认 `data/`） |
+| API 鉴权 | 无 | 默认同网段可读写；公网暴露需前置反向代理 + 鉴权 |
+
+**适合**：个人开发、小团队内网预览、MCP Agent 建模 + Web 工作台。
+
+JSON 写入使用原子替换（`*.tmp` → rename），降低异常中断时的文件损坏风险；仍非多进程安全，请勿水平扩展 API。
+
 ## 本机 vs 局域网（速查）
 
 | | **本机 Local** | **局域网 LAN** |

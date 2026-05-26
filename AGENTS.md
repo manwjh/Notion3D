@@ -49,6 +49,8 @@ notion3d_apply_template(...)
 
 主路径 tools：`notion3d_health` · `notion3d_report_design_plan` · `notion3d_render_forge` · `notion3d_wait_job` · `notion3d_report_design_review` · `notion3d_get_forge_sources` · `notion3d_apply_template`
 
+**Web Turn / 状态**（`WEB_TURN=bridge|gateway` 或需读快照时）：`notion3d_get_project_state` · `notion3d_wait_agent`（等浏览器侧 Agent 跑完，`agent.active` → false）。Sidecar 示例：[docs/agents/web-turn-bridge.md](docs/agents/web-turn-bridge.md#mcp-辅助工具web-turn)
+
 ## 延伸阅读
 
 - [docs/dependencies.md](docs/dependencies.md) — 依赖、LLM 归属、环境变量

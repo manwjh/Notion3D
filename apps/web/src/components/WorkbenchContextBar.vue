@@ -1,41 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import type { ModelVersion } from "../api/client";
 import ExportMenu from "./ExportMenu.vue";
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     activeVersion: ModelVersion | null | undefined;
     projectName?: string | null;
     versionIncomplete: boolean;
     jobBusy: boolean;
     resumingStl: boolean;
-    pickMode: boolean;
-    canPick: boolean;
     viewingLatest: boolean;
     hasExport: boolean;
-    viewMode?: "assembly" | "forge";
-    canForgePreview?: boolean;
   }>(),
   {
-    viewMode: "assembly",
-    canForgePreview: false,
     projectName: null,
   },
 );
 
 const emit = defineEmits<{
   resumeStl: [];
-  togglePick: [];
-  setViewMode: [mode: "assembly" | "forge"];
 }>();
 
 const menuOpen = ref(false);
 const menuRef = ref<HTMLElement | null>(null);
-
-const showViewToggle = computed(
-  () => props.canForgePreview && Boolean(props.activeVersion?.forge_url),
-);
 
 function onDocClick(e: MouseEvent) {
   if (menuRef.value && !menuRef.value.contains(e.target as Node)) menuOpen.value = false;
@@ -62,38 +50,6 @@ onUnmounted(() => document.removeEventListener("mousedown", onDocClick));
     </div>
 
     <div class="workbench-context-actions">
-      <div v-if="showViewToggle" class="preview-view-toggle" role="tablist">
-        <button
-          type="button"
-          role="tab"
-          class="action-btn action-btn--ghost"
-          :class="{ active: viewMode !== 'forge' }"
-          @click="emit('setViewMode', 'assembly')"
-        >
-          装配
-        </button>
-        <button
-          type="button"
-          role="tab"
-          class="action-btn action-btn--ghost"
-          :class="{ active: viewMode === 'forge' }"
-          @click="emit('setViewMode', 'forge')"
-        >
-          Forge 实时
-        </button>
-      </div>
-
-      <button
-        type="button"
-        class="action-btn action-btn--pick"
-        :class="{ active: pickMode }"
-        :disabled="!canPick"
-        :aria-pressed="pickMode"
-        @click="emit('togglePick')"
-      >
-        {{ pickMode ? "点选中" : "点选" }}
-      </button>
-
       <ExportMenu v-if="hasExport" :version="activeVersion" />
 
       <div ref="menuRef" class="preview-menu">
@@ -177,24 +133,5 @@ onUnmounted(() => document.removeEventListener("mousedown", onDocClick));
   align-items: center;
   gap: 0.35rem;
   flex-shrink: 0;
-}
-
-.preview-view-toggle {
-  display: inline-flex;
-  border: 1px solid var(--border-strong);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.preview-view-toggle .action-btn {
-  border: none;
-  border-radius: 0;
-  font-size: 0.72rem;
-  padding: 0.28rem 0.5rem;
-}
-
-.preview-view-toggle .action-btn.active {
-  background: #2a3550;
-  color: #dbe4ff;
 }
 </style>

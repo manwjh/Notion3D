@@ -1,14 +1,10 @@
 import { onUnmounted, ref, watch } from "vue";
-import { getJob, listActiveJobs, type Job } from "../api/client";
+import { listActiveJobs, waitJob, type Job } from "../api/client";
 import {
   jobToGenerationState,
   phaseFromJob,
   type GenerationState,
 } from "../types/generation";
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
 
 export function useActiveJob(
   projectId: () => string | null,
@@ -18,26 +14,18 @@ export function useActiveJob(
   let trackingId: string | null = null;
   let cancelled = false;
 
-  async function trackJob(job: Job, prompt: string) {
-    const pid = projectId();
-    if (!pid || trackingId === job.id) return;
-    trackingId = job.id;
+  function applyJobState(current: Job, prompt: string) {
+    const phase = phaseFromJob(current);
+    generation.value = jobToGenerationState(
+      phase,
+      current.message,
+      prompt,
+      true,
+      current,
+    );
+  }
 
-    let current = job;
-    while (current.status === "pending" || current.status === "running") {
-      if (cancelled) return;
-      const phase = phaseFromJob(current);
-      generation.value = jobToGenerationState(
-        phase,
-        current.message,
-        prompt,
-        true,
-        current,
-      );
-      await sleep(800);
-      current = await getJob(pid, current.id);
-    }
-
+  async function finalizeJob(current: Job, prompt: string) {
     const finalPhase = current.status === "succeeded" ? "done" : "failed";
     generation.value = jobToGenerationState(
       finalPhase,
@@ -46,15 +34,35 @@ export function useActiveJob(
       true,
       current,
     );
-    await onDone();
+    try {
+      await onDone();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      const delay = current.status === "succeeded" ? 1500 : 3000;
+      setTimeout(() => {
+        if (trackingId === current.id) {
+          generation.value = null;
+          trackingId = null;
+        }
+      }, delay);
+    }
+  }
 
-    const delay = current.status === "succeeded" ? 1500 : 3000;
-    setTimeout(() => {
-      if (trackingId === job.id) {
-        generation.value = null;
-        trackingId = null;
-      }
-    }, delay);
+  async function trackJob(job: Job, prompt: string) {
+    const pid = projectId();
+    if (!pid || trackingId === job.id) return;
+    trackingId = job.id;
+
+    if (cancelled) return;
+
+    const current = await waitJob(pid, job, (updated) => {
+      if (cancelled) return;
+      applyJobState(updated, prompt);
+    });
+
+    if (cancelled) return;
+    await finalizeJob(current, prompt);
   }
 
   watch(

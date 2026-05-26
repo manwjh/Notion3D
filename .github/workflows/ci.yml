@@ -28,5 +28,11 @@ jobs:
       - name: pytest
         run: cd apps/api && pytest -q
 
+      - name: Install Web
+        run: cd apps/web && npm ci
+
+      - name: Web build
+        run: cd apps/web && npm run build
+
       - name: Validate builtin templates
         run: bash templates/scripts/validate-all.sh

@@ -1,5 +1,11 @@
 # Notion3D — ForgeCAD 装配工作台
 
+<p align="center">
+  <img src="docs/assets/workbench-screenshot.png" alt="Notion3D 三栏工作台：左侧部件树与参数、中间 3D 视口、右侧 AI 对话" width="920">
+</p>
+
+<p align="center"><em>自然语言建模 → ForgeCAD 装配 → 三栏工作台预览与精修</em></p>
+
 用自然语言描述需求，外部 Agent 写 ForgeCAD 脚本，Engine 渲染多部件装配，**Web 三栏工作台**预览与导出。
 
 **Notion3D 引擎不含 LLM**。建模智能经**技术接口**接入（MCP / 可选 Web Turn）；Web UI 对用户无感——用户只打开工作台，不关心 Agent 叫什么、配在哪。

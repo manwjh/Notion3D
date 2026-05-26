@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from mcp.server.fastmcp import FastMCP
 
 from notion3d_mcp.client import Notion3DClient, format_json
@@ -22,6 +24,7 @@ mcp = FastMCP(
 
 client = Notion3DClient()
 _web_base_ready = False
+logger = logging.getLogger(__name__)
 
 
 def _ensure_web_base() -> None:
@@ -30,8 +33,8 @@ def _ensure_web_base() -> None:
         return
     try:
         resolve_web_base_from_health(client.health())
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning("Could not resolve NOTION3D_WEB_BASE from /health: %s", exc)
     _web_base_ready = True
 
 
@@ -190,6 +193,18 @@ def notion3d_render_forge(
         if not isinstance(files, dict):
             raise ValueError("files_json must be a JSON object")
     return _out(client.render_forge(project_id, forge_code, label=label, files=files))
+
+
+@mcp.tool()
+def notion3d_get_project_state(project_id: str) -> str:
+    """Get unified project snapshot: messages, active turn, active job, agent status."""
+    return _out(client.get_project_state(project_id))
+
+
+@mcp.tool()
+def notion3d_wait_agent(project_id: str, max_wait_seconds: float = 600) -> str:
+    """Wait until Web Turn agent run finishes (agent.active becomes false). Returns project state."""
+    return _out(client.wait_agent(project_id, max_wait=max_wait_seconds))
 
 
 @mcp.tool()

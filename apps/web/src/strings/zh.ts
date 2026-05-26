@@ -28,7 +28,6 @@ export const CHAT = {
 } as const;
 
 export const WORKBENCH = {
-  subtitle: "ForgeCAD 装配工作台",
   viewportEmpty: "新建项目并描述需求，模型会显示在这里",
   structureEmpty: "创建项目并开始建模后，结构面板会显示在这里。",
   mobileChatTab: "对话",
@@ -41,6 +40,16 @@ export const STATUS = {
   forgeMissing: "渲染引擎未就绪",
   workbenchReady: "工作台就绪",
   workbenchMissing: "服务未连接",
+} as const;
+
+export const STATUS_BAR = {
+  noProject: "未选择项目",
+  noModel: "暂无模型",
+  pendingMesh: "待生成可打印模型",
+  manualEditOnly: "仅手动编辑",
+  partCount: (count: number) => `${count} 个部件`,
+  selectedPart: (label: string) => `选中 ${label}`,
+  validationCount: (count: number) => `${count} 条校验提示`,
 } as const;
 
 export function assistantDisplayName(

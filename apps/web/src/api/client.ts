@@ -66,8 +66,6 @@ export type WebChatMode = "agent" | "setup_required";
 export type Health = {
   status: string;
   forgecad_available: boolean;
-  forge_preview_available?: boolean;
-  forge_preview_running?: boolean;
   cad_backend?: string;
   web_base_url?: string;
   web_turn?: "off" | "bridge" | "gateway";
@@ -191,22 +189,55 @@ export const renderForge = (
     }),
   });
 
-export type ForgePreviewResult = {
-  ready: boolean;
-  url: string | null;
-  embed_url?: string | null;
-  error?: string | null;
-  mode?: string | null;
-};
-
-export const startForgePreview = (projectId: string, version: number) =>
-  request<ForgePreviewResult>(
-    `/api/projects/${projectId}/versions/${version}/forge-preview`,
-    { method: "POST" },
-  );
-
 export const getProjectState = (projectId: string) =>
   request<ProjectState>(`/api/projects/${projectId}/state`);
+
+/** SSE project state while Agent run is active; polling fallback. */
+export async function waitAgentRun(
+  projectId: string,
+  onUpdate: (state: ProjectState) => void,
+  pollMs = 2000,
+): Promise<ProjectState> {
+  let current = await getProjectState(projectId);
+  onUpdate(current);
+  if (!current.agent.active) return current;
+
+  if (typeof EventSource !== "undefined") {
+    const streamed = await new Promise<ProjectState | null>((resolve) => {
+      let last: ProjectState | null = current;
+      let settled = false;
+      const source = new EventSource(
+        `/api/projects/${projectId}/state/events`,
+      );
+      const finish = (state: ProjectState | null) => {
+        if (settled) return;
+        settled = true;
+        source.close();
+        resolve(state);
+      };
+      source.onmessage = (event) => {
+        try {
+          const state = JSON.parse(event.data) as ProjectState;
+          last = state;
+          onUpdate(state);
+          if (!state.agent.active) finish(state);
+        } catch {
+          finish(last);
+        }
+      };
+      source.onerror = () => finish(last);
+    });
+    if (streamed && !streamed.agent.active) return streamed;
+    if (streamed) current = streamed;
+  }
+
+  while (current.agent.active) {
+    await sleep(pollMs);
+    current = await getProjectState(projectId);
+    onUpdate(current);
+  }
+  return current;
+}
 
 export type ModelPick = {
   x: number;
@@ -236,6 +267,73 @@ export const sendTurn = (
 
 export const getJob = (projectId: string, jobId: string) =>
   request<Job>(`/api/projects/${projectId}/jobs/${jobId}`);
+
+const TERMINAL_JOB_STATUSES = new Set<Job["status"]>(["succeeded", "failed"]);
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** SSE push updates with polling until terminal (SSE alone can miss terminal events). */
+export async function waitJob(
+  projectId: string,
+  initial: Job,
+  onUpdate: (job: Job) => void,
+  pollMs = 800,
+): Promise<Job> {
+  let current = initial;
+  onUpdate(current);
+  if (TERMINAL_JOB_STATUSES.has(current.status)) return current;
+
+  const jobId = initial.id;
+
+  return await new Promise<Job>((resolve) => {
+    let settled = false;
+    let source: EventSource | null = null;
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+    const finish = (job: Job) => {
+      if (settled) return;
+      settled = true;
+      source?.close();
+      if (pollTimer != null) clearInterval(pollTimer);
+      resolve(job);
+    };
+
+    const apply = (job: Job) => {
+      current = job;
+      onUpdate(job);
+      if (TERMINAL_JOB_STATUSES.has(job.status)) finish(job);
+    };
+
+    const poll = async () => {
+      if (settled) return;
+      try {
+        apply(await getJob(projectId, jobId));
+      } catch {
+        // transient network errors — keep polling
+      }
+    };
+
+    pollTimer = setInterval(() => void poll(), pollMs);
+
+    if (typeof EventSource !== "undefined") {
+      source = new EventSource(
+        `/api/projects/${projectId}/jobs/${jobId}/events`,
+      );
+      source.onmessage = (event) => {
+        try {
+          apply(JSON.parse(event.data) as Job);
+        } catch {
+          source?.close();
+        }
+      };
+      source.onerror = () => source?.close();
+    }
+
+    void poll();
+  });
+}
 
 export const listActiveJobs = (projectId: string) =>
   request<Job[]>(`/api/projects/${projectId}/jobs/active`);

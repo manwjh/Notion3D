@@ -13,14 +13,12 @@ const props = withDefaults(
     loading?: boolean;
     loadingLabel?: string | null;
     versionPending?: boolean;
-    pickMode?: boolean;
     pick?: ModelPick | null;
   }>(),
   {
     loading: false,
     loadingLabel: null,
     versionPending: false,
-    pickMode: false,
     pick: null,
     partsUrl: null,
   },
@@ -45,6 +43,8 @@ let grid: THREE.GridHelper | null = null;
 let animId = 0;
 let raycaster = new THREE.Raycaster();
 let pointer = new THREE.Vector2();
+let pointerDown = { x: 0, y: 0 };
+const CLICK_MOVE_THRESHOLD = 6;
 
 function alignGeometryOnBuildPlate(geometry: THREE.BufferGeometry) {
   geometry.rotateX(-Math.PI / 2);
@@ -237,7 +237,7 @@ async function loadStl(url: string) {
     mesh = new THREE.Mesh(
       geo,
       new THREE.MeshStandardMaterial({
-        color: props.pickMode ? "#8ec0ff" : "#6ea8fe",
+        color: "#6ea8fe",
         metalness: 0.12,
         roughness: 0.45,
       }),
@@ -253,8 +253,16 @@ async function loadStl(url: string) {
   }
 }
 
-function onPointerClick(ev: MouseEvent) {
-  if (!props.pickMode || !camera || !canvasHost.value) return;
+function onPointerDown(ev: PointerEvent) {
+  pointerDown = { x: ev.clientX, y: ev.clientY };
+}
+
+function onPointerUp(ev: PointerEvent) {
+  if (!camera || !canvasHost.value) return;
+  const dx = ev.clientX - pointerDown.x;
+  const dy = ev.clientY - pointerDown.y;
+  if (Math.hypot(dx, dy) > CLICK_MOVE_THRESHOLD) return;
+
   const target = modelRoot ?? mesh;
   if (!target) return;
   const rect = canvasHost.value.getBoundingClientRect();
@@ -284,14 +292,6 @@ function onPointerClick(ev: MouseEvent) {
       ? partLabel ?? partId
       : describePick(p.x, p.y, p.z, n.x, n.y, n.z),
   });
-}
-
-function onPointerMove() {
-  if (props.pickMode) document.body.style.cursor = "crosshair";
-}
-
-function onPointerLeave() {
-  document.body.style.cursor = "";
 }
 
 function animate() {
@@ -339,9 +339,8 @@ function initThree() {
   grid = new THREE.GridHelper(300, 30, 0x3a4254, 0x252b36);
   scene.add(grid);
 
-  renderer.domElement.addEventListener("click", onPointerClick);
-  renderer.domElement.addEventListener("pointermove", onPointerMove);
-  renderer.domElement.addEventListener("pointerleave", onPointerLeave);
+  renderer.domElement.addEventListener("pointerdown", onPointerDown);
+  renderer.domElement.addEventListener("pointerup", onPointerUp);
 
   const ro = new ResizeObserver(resizeRenderer);
   ro.observe(canvasHost.value);
@@ -369,9 +368,8 @@ function destroyThree() {
     const el = canvasHost.value as HTMLElement & { _ro?: ResizeObserver };
     el._ro?.disconnect();
     if (renderer) {
-      renderer.domElement.removeEventListener("click", onPointerClick);
-      renderer.domElement.removeEventListener("pointermove", onPointerMove);
-      renderer.domElement.removeEventListener("pointerleave", onPointerLeave);
+      renderer.domElement.removeEventListener("pointerdown", onPointerDown);
+      renderer.domElement.removeEventListener("pointerup", onPointerUp);
       renderer.dispose();
       canvasHost.value.removeChild(renderer.domElement);
     }
@@ -399,29 +397,6 @@ watch(
   () => props.loading,
   () => {
     if (props.stlUrl) void ensureViewerReady();
-  },
-);
-
-watch(
-  () => props.pickMode,
-  (mode) => {
-    if (controls) controls.enabled = !mode;
-    const tint = mode ? "#8ec0ff" : null;
-    if (mesh?.material instanceof THREE.MeshStandardMaterial && tint) {
-      mesh.material.color.set(tint);
-    } else if (mesh?.material instanceof THREE.MeshStandardMaterial) {
-      mesh.material.color.set("#6ea8fe");
-    }
-    if (modelRoot) {
-      modelRoot.traverse((obj) => {
-        if (!(obj instanceof THREE.Mesh)) return;
-        const mat = obj.material;
-        if (!(mat instanceof THREE.MeshStandardMaterial)) return;
-        if (mode) mat.emissive.set("#224466");
-        else mat.emissive.set("#000000");
-      });
-    }
-    if (!mode) document.body.style.cursor = "";
   },
 );
 
@@ -486,10 +461,10 @@ defineExpose({ setPartVisible, setPartOpacity, fitPart, fitAll, highlightPart, l
     <div
       ref="canvasHost"
       class="viewer-root viewer-root--canvas"
-      :class="{ 'viewer-root--pick': pickMode, 'viewer-root--hidden': !stlUrl }"
+      :class="{ 'viewer-root--pick': pick, 'viewer-root--hidden': !stlUrl }"
     >
-      <div v-if="pickMode" class="viewer-pick-hint">
-        点击模型部件（有分色标注时按元素选中），回对话区描述修改
+      <div v-if="stlUrl && !pick" class="viewer-pick-hint">
+        单击模型选中部件，拖拽旋转观察
       </div>
       <p v-if="error" class="viewer-error">{{ error }}</p>
       <span v-if="meshLoading" class="viewer-loading viewer-loading--overlay">加载模型…</span>

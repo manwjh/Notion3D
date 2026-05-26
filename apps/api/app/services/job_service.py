@@ -6,6 +6,7 @@ from app.models.schemas import JobSource, JobStatus, MessageRole
 from app.services import design_turn, forgecad_service, job_store, storage
 from app.services.cad_backend import CadBackend, SOURCE_FILENAME
 from app.services.cad_types import CadError
+from app.services import job_events
 
 _jobs: dict[str, dict] = {}
 
@@ -17,6 +18,12 @@ def _utcnow() -> datetime:
 def _persist(job: dict) -> dict:
     _jobs[job["id"]] = job
     job_store.save_job(job)
+    job_events.publish(job)
+    project_id = job.get("project_id")
+    if project_id:
+        from app.services import project_events
+
+        project_events.notify(project_id)
     return job
 
 

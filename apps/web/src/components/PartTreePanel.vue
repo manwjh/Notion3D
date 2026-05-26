@@ -1,8 +1,9 @@
 <script setup lang="ts">
+import { nextTick, ref, watch } from "vue";
 import type { ModelPart } from "../types/parts";
 import type { ModelPick } from "../types/pick";
 
-defineProps<{
+const props = defineProps<{
   parts: ModelPart[];
   pick?: ModelPick | null;
   hidden: Record<string, boolean>;
@@ -18,6 +19,19 @@ const emit = defineEmits<{
   fitAll: [];
   shellMode: [];
 }>();
+
+const listRef = ref<HTMLUListElement | null>(null);
+
+watch(
+  () => props.pick?.element,
+  async (element) => {
+    if (!element) return;
+    await nextTick();
+    listRef.value
+      ?.querySelector(`[data-part-id="${element}"]`)
+      ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  },
+);
 </script>
 
 <template>
@@ -32,10 +46,11 @@ const emit = defineEmits<{
       <button type="button" @click="emit('shellMode')">外壳</button>
     </div>
     <p v-if="!parts.length" class="part-tree-empty">暂无分件，生成装配后会显示部件树。</p>
-    <ul v-else class="part-tree-list">
+    <ul v-else ref="listRef" class="part-tree-list">
       <li
         v-for="part in parts"
         :key="part.id"
+        :data-part-id="part.id"
         :class="{ selected: pick?.element === part.id }"
         @click="emit('pick', part)"
       >
@@ -69,10 +84,13 @@ const emit = defineEmits<{
 .part-tree-panel {
   display: flex;
   flex-direction: column;
+  flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 .part-tree-head {
+  flex-shrink: 0;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -89,6 +107,7 @@ const emit = defineEmits<{
 }
 
 .part-tree-actions {
+  flex-shrink: 0;
   display: flex;
   gap: 0.3rem;
   padding: 0 0.65rem 0.45rem;
@@ -116,9 +135,13 @@ const emit = defineEmits<{
   list-style: none;
   margin: 0;
   padding: 0;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   flex: 1;
   min-height: 0;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-gutter: stable;
 }
 
 .part-tree-list li {

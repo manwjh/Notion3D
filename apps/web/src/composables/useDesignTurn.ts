@@ -5,6 +5,7 @@ export function mergeSessionPhase(
   generation: GenerationState | null,
   agentBusy: boolean,
   activeTurn: DesignTurn | null,
+  agentActive = false,
 ): {
   phase: JobPhase;
   detail: string | null;
@@ -14,24 +15,17 @@ export function mergeSessionPhase(
 } {
   const designPhase = activeTurn?.design_phase ?? null;
   if (generation?.busy) {
+    const terminal =
+      generation.phase === "done" || generation.phase === "failed";
     return {
       phase: generation.phase,
       detail: generation.detail,
-      busy: true,
-      lane: "render",
+      busy: !terminal,
+      lane: terminal ? "idle" : "render",
       designPhase,
     };
   }
-  if (activeTurn?.render_phase === "running") {
-    return {
-      phase: "rendering",
-      detail: "正在生成 3D 模型…",
-      busy: true,
-      lane: "render",
-      designPhase: designPhase ?? "render",
-    };
-  }
-  if (agentBusy || activeTurn?.agent_phase === "running") {
+  if (agentBusy || agentActive) {
     return {
       phase: "generating",
       detail: "正在建模…",

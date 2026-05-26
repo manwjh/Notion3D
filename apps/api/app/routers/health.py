@@ -21,6 +21,6 @@ async def health() -> HealthOut:
         web_turn=settings.normalized_web_turn,
         web_turn_ready=bridge_ready(),
         web_chat_mode=web_chat_mode(),
-        forge_preview_available=forgecad_service.forgecad_available(),
+        forge_preview_available=forge_preview_service.preview_studio_available(),
         forge_preview_running=forge_preview_service.preview_running(),
     )

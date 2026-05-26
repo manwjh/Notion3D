@@ -92,11 +92,18 @@
 }
 
 .structure-pane {
+  display: flex;
+  flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--border);
   background: var(--bg-surface);
+}
+
+.structure-pane > .structure-panel {
+  flex: 1;
+  min-height: 0;
 }
 
 .studio-pane {

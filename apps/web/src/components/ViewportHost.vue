@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import ModelViewer from "./ModelViewer.vue";
-import ForgePreviewViewer from "./ForgePreviewViewer.vue";
 import type { ModelPick } from "../types/pick";
 import type { ModelPart } from "../types/parts";
 
@@ -12,24 +11,14 @@ withDefaults(
     loading?: boolean;
     loadingLabel?: string | null;
     versionPending?: boolean;
-    pickMode?: boolean;
     pick?: ModelPick | null;
-    viewMode?: "assembly" | "forge";
-    projectId?: string | null;
-    previewVersion?: number | null;
-    forgePreviewEnabled?: boolean;
   }>(),
   {
     loading: false,
     loadingLabel: null,
     versionPending: false,
-    pickMode: false,
     pick: null,
     partsUrl: null,
-    viewMode: "assembly",
-    projectId: null,
-    previewVersion: null,
-    forgePreviewEnabled: false,
   },
 );
 
@@ -73,28 +62,17 @@ defineExpose({
 
 <template>
   <div class="viewport-host">
-    <ForgePreviewViewer
-      v-if="viewMode === 'forge'"
-      :project-id="projectId ?? null"
-      :version="previewVersion ?? null"
-      :enabled="forgePreviewEnabled"
-    />
     <ModelViewer
-      v-else
       ref="viewerRef"
       :stl-url="stlUrl"
       :parts-url="partsUrl"
       :loading="loading"
       :loading-label="loadingLabel"
       :version-pending="versionPending"
-      :pick-mode="pickMode"
       :pick="pick"
       @pick="emit('pick', $event)"
       @parts-loaded="onPartsLoaded"
     />
-    <div v-if="pickMode && viewMode === 'assembly'" class="viewport-pick-hint">
-      点击模型或左侧部件树选择修改目标
-    </div>
   </div>
 </template>
 
@@ -105,20 +83,5 @@ defineExpose({
   min-height: 0;
   display: flex;
   flex-direction: column;
-}
-
-.viewport-pick-hint {
-  position: absolute;
-  top: 0.65rem;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 2;
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  background: rgba(20, 24, 32, 0.92);
-  border: 1px solid rgba(110, 168, 254, 0.45);
-  color: #aeb6c8;
-  font-size: 0.75rem;
-  pointer-events: none;
 }
 </style>

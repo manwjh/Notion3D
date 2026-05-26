@@ -1,30 +1,74 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import type { Health } from "../api/client";
+import type { Health, WebChatMode } from "../api/client";
+import { STATUS_BAR } from "../strings/zh";
+
+type SegmentTone = "busy" | "warn" | "muted";
+
+type StatusSegment = {
+  text: string;
+  tone?: SegmentTone;
+};
 
 const props = defineProps<{
   health: Health | null;
   validationWarnings: string[];
+  projectSelected: boolean;
+  jobStatusLabel: string | null;
+  partCount: number;
+  versionIncomplete: boolean;
+  hasModel: boolean;
+  selectedPartLabel: string | null;
 }>();
 
-const forgeStatus = computed(() => {
-  if (!props.health?.forgecad_available) return "Forge 未就绪";
-  if (props.health.forge_preview_running) return "Forge 预览运行中";
-  return "Forge 就绪";
+const segments = computed((): StatusSegment[] => {
+  const items: StatusSegment[] = [];
+
+  if (props.jobStatusLabel) {
+    items.push({ text: props.jobStatusLabel, tone: "busy" });
+  } else if (!props.projectSelected) {
+    items.push({ text: STATUS_BAR.noProject, tone: "muted" });
+  } else if (props.partCount > 0) {
+    items.push({ text: STATUS_BAR.partCount(props.partCount) });
+  } else if (props.versionIncomplete) {
+    items.push({ text: STATUS_BAR.pendingMesh, tone: "warn" });
+  } else if (!props.hasModel) {
+    items.push({ text: STATUS_BAR.noModel, tone: "muted" });
+  }
+
+  if (props.selectedPartLabel) {
+    items.push({ text: STATUS_BAR.selectedPart(props.selectedPartLabel) });
+  }
+
+  const chatMode: WebChatMode | undefined = props.health?.web_chat_mode;
+  if (chatMode === "setup_required" && !props.jobStatusLabel) {
+    items.push({ text: STATUS_BAR.manualEditOnly, tone: "muted" });
+  }
+
+  return items;
 });
+
+function toneClass(tone?: SegmentTone): string | undefined {
+  if (tone === "busy") return "workbench-status-busy";
+  if (tone === "warn") return "workbench-status-warn";
+  if (tone === "muted") return "workbench-status-muted";
+  return undefined;
+}
 </script>
 
 <template>
   <footer class="workbench-status-bar" role="contentinfo">
     <span>单位 mm</span>
-    <span class="sep">·</span>
-    <span>ForgeCAD</span>
-    <span class="sep">·</span>
-    <span :class="{ warn: !health?.forgecad_available }">{{ forgeStatus }}</span>
-    <span v-if="validationWarnings.length" class="workbench-status-warn">
+    <template v-for="(segment, index) in segments" :key="index">
       <span class="sep">·</span>
-      {{ validationWarnings.length }} 条校验提示
-    </span>
+      <span :class="toneClass(segment.tone)">{{ segment.text }}</span>
+    </template>
+    <template v-if="validationWarnings.length">
+      <span class="sep">·</span>
+      <span class="workbench-status-warn">
+        {{ STATUS_BAR.validationCount(validationWarnings.length) }}
+      </span>
+    </template>
   </footer>
 </template>
 
@@ -46,7 +90,16 @@ const forgeStatus = computed(() => {
   opacity: 0.45;
 }
 
+.workbench-status-busy {
+  color: #8eb8ff;
+}
+
 .workbench-status-warn {
   color: var(--warn);
+}
+
+.workbench-status-muted {
+  color: var(--text-subtle);
+  opacity: 0.85;
 }
 </style>

@@ -9,8 +9,8 @@ import type {
   ModelVersion,
   ProjectCapabilities,
 } from "../api/client";
-import { getJob, getProjectState, sendTurn } from "../api/client";
-import { mergeSessionPhase, sleep } from "../composables/useDesignTurn";
+import { getJob, getProjectState, sendTurn, waitAgentRun } from "../api/client";
+import { mergeSessionPhase } from "../composables/useDesignTurn";
 import {
   CHAT,
   DESIGN_PHASE_LABEL,
@@ -61,12 +61,14 @@ const emit = defineEmits<{
   trackJob: [job: Job, prompt: string];
   selectVersion: [version: number];
   agentBusyChange: [busy: boolean];
+  activeTurnChange: [turn: DesignTurn | null];
 }>();
 
 const messages = ref<ChatMessage[]>([]);
 const input = ref("");
 const sending = ref(false);
 const agentBusy = ref(false);
+const agentActive = ref(false);
 const submitError = ref<string | null>(null);
 const capabilities = ref<ProjectCapabilities | null>(null);
 const bottomRef = ref<HTMLElement | null>(null);
@@ -95,6 +97,7 @@ const session = computed(() =>
     props.generation,
     agentBusy.value || props.agentBusyExternal,
     props.activeTurn,
+    agentActive.value,
   ),
 );
 
@@ -193,6 +196,8 @@ async function refreshMessages(projectId: string) {
   const state = await getProjectState(projectId);
   messages.value = state.messages;
   capabilities.value = state.capabilities;
+  agentActive.value = state.agent.active;
+  emit("activeTurnChange", state.active_turn);
   return state;
 }
 
@@ -215,6 +220,7 @@ watch(
       messages.value = [];
       submitError.value = null;
       agentBusy.value = false;
+      agentActive.value = false;
       return;
     }
     void hydrateProject(pid);
@@ -256,21 +262,27 @@ async function pollAgentRun(projectId: string, prompt: string) {
   if (agentBusy.value) return;
   agentBusy.value = true;
   let tracked = false;
-  const deadline = Date.now() + 600_000;
   try {
-    while (Date.now() < deadline) {
-      const state = await getProjectState(projectId);
+    await waitAgentRun(projectId, (state) => {
+      messages.value = state.messages;
+      capabilities.value = state.capabilities;
+      agentActive.value = state.agent.active;
+      emit("activeTurnChange", state.active_turn);
       const st = state.agent;
       if (st.active_job_id && !tracked) {
         tracked = true;
-        const job = state.active_job ?? (await getJob(projectId, st.active_job_id));
-        emit("trackJob", job, prompt);
+        if (state.active_job) {
+          emit("trackJob", state.active_job, prompt);
+        } else {
+          getJob(projectId, st.active_job_id)
+            .then((job) => emit("trackJob", job, prompt))
+            .catch(console.error);
+        }
       }
-      if (!st.active) break;
-      await sleep(2000);
-    }
+    });
   } finally {
     agentBusy.value = false;
+    agentActive.value = false;
   }
 }
 

@@ -54,10 +54,7 @@ async def list_templates(
 
 @router.get("/{template_id}", response_model=TemplateDetailOut)
 async def get_template(template_id: str) -> TemplateDetailOut:
-    try:
-        item = template_library.get_template(template_id)
-    except template_library.TemplateError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    item = template_library.get_template(template_id)
     return _template_detail(item)
 
 
@@ -67,10 +64,7 @@ async def apply_template(
     body: TemplateApplyIn,
     background_tasks: BackgroundTasks,
 ) -> TemplateApplyOut:
-    try:
-        detail, forge_code = template_library.prepare_forge(template_id, body.params)
-    except template_library.TemplateError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    detail, forge_code = template_library.prepare_forge(template_id, body.params)
 
     project: ProjectOut
     if body.project_id:
